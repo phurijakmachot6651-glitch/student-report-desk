@@ -137,6 +137,10 @@
     border-color: var(--color-border);
   }
 
+  html, body {
+    font-family: "Sarabun", system-ui, -apple-system, sans-serif;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
