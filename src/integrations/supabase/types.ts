@@ -14,16 +14,164 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      companies: {
+        Row: {
+          created_at: string
+          display_order: number
+          full_strength: number
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order: number
+          full_strength?: number
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          full_strength?: number
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      daily_reports: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          report_date: string
+          report_time: string
+          reporter_name: string
+          reporter_position: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          report_date: string
+          report_time?: string
+          reporter_name?: string
+          reporter_position?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          report_date?: string
+          report_time?: string
+          reporter_name?: string
+          reporter_position?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_reports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatch_entries: {
+        Row: {
+          cadet_name: string
+          category: Database["public"]["Enums"]["dispatch_category"]
+          count: number
+          created_at: string
+          display_order: number
+          id: string
+          location: string
+          reason: string
+          report_id: string
+          subcategory: string
+        }
+        Insert: {
+          cadet_name?: string
+          category: Database["public"]["Enums"]["dispatch_category"]
+          count?: number
+          created_at?: string
+          display_order?: number
+          id?: string
+          location?: string
+          reason?: string
+          report_id: string
+          subcategory?: string
+        }
+        Update: {
+          cadet_name?: string
+          category?: Database["public"]["Enums"]["dispatch_category"]
+          count?: number
+          created_at?: string
+          display_order?: number
+          id?: string
+          location?: string
+          reason?: string
+          report_id?: string
+          subcategory?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_entries_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "daily_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin"
+      dispatch_category:
+        | "sick"
+        | "leave"
+        | "absent"
+        | "official"
+        | "suspended"
+        | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +298,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin"],
+      dispatch_category: [
+        "sick",
+        "leave",
+        "absent",
+        "official",
+        "suspended",
+        "other",
+      ],
+    },
   },
 } as const
