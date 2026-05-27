@@ -69,7 +69,15 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
     : `   📍 ${label} - นาย`;
 
   if (cat === "other") {
-    const lines = list.map((e) => `   - ${e.subcategory || "ไม่ระบุ"}  ${toThaiNumerals(e.count || 0)} นาย`);
+    const grouped = list.reduce((acc, e) => {
+      const key = e.subcategory || "ไม่ระบุ";
+      acc[key] = (acc[key] || 0) + (e.count || 0);
+      return acc;
+    }, {} as Record<string, number>);
+
+    const lines = Object.entries(grouped).map(
+      ([key, count]) => `   - ${key}                  ${toThaiNumerals(count)} นาย`
+    );
     return [head, ...lines].join("\n");
   }
   const lines = list.map((e) => {
@@ -86,14 +94,14 @@ export function buildReportText(input: ReportInput): string {
   const header = [
     `${input.companyName}`,
     "",
-    "**************************",
+    "************************",
     "",
     "เรียน ผู้บังคับบัญชา",
     "",
     `กระผม ${input.reporterName || "-"}`,
     `${input.reporterPosition || "-"}`,
     "",
-    `ขออนุญาตรายงานยอดกำลังพล ประจำ${formatThaiDate(input.reportDate)} เวลา ${input.reportTime || "-"} น. ดังนี้`,
+    `ขออนุญาตรายงานยอดกำลังพลของนักเรียนนายร้อยตำรวจชั้นปีที่ ๒ รุ่นที่ ๘๒ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
     "",
     `📌 ยอดเต็ม                   ${toThaiNumerals(input.fullStrength)} นาย`,
     `📌 จำหน่ายรวม                ${toThaiNumerals(totalDispatched)} นาย`,

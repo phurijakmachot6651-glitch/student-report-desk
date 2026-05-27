@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, ArrowLeft, Copy, Eye } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   CATEGORY_LABELS, CATEGORY_ORDER, buildReportText, parseISODate,
@@ -28,7 +27,6 @@ function CompanyPage() {
   const [reporterPosition, setReporterPosition] = useState("");
   const [reportTime, setReportTime] = useState("05.45");
   const [entries, setEntries] = useState<EntryRow[]>([]);
-  const [showPreview, setShowPreview] = useState(false);
 
   const { data: company } = useQuery({
     queryKey: ["company", id],
@@ -149,7 +147,7 @@ function CompanyPage() {
       fullStrength: company.full_strength,
       reportDate: parseISODate(date),
       reporterName,
-      reporterPosition,
+      reporterPosition: reporterPosition ? `เลขที่ในหมวด ${reporterPosition}` : "-",
       reportTime,
       entries,
     });
@@ -187,12 +185,12 @@ function CompanyPage() {
               <Input value={reportTime} onChange={(e) => setReportTime(e.target.value)} placeholder="05.45" />
             </div>
             <div className="sm:col-span-2">
-              <Label>ชื่อผู้รายงาน</Label>
+              <Label>ชื่อผู้ควบคุมแถว</Label>
               <Input value={reporterName} onChange={(e) => setReporterName(e.target.value)} placeholder="นรต.ชนสิษฎ์ ทองย่อน" />
             </div>
             <div className="sm:col-span-2">
-              <Label>ตำแหน่ง</Label>
-              <Input value={reporterPosition} onChange={(e) => setReporterPosition(e.target.value)} placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค." />
+              <Label>เลขที่ในหมวด</Label>
+              <Input value={reporterPosition} onChange={(e) => setReporterPosition(e.target.value)} placeholder="๑" />
             </div>
           </CardContent>
         </Card>
@@ -268,24 +266,10 @@ function CompanyPage() {
           <Button onClick={() => save.mutate()} disabled={save.isPending} className="flex-1">
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
-          <Button variant="outline" onClick={() => setShowPreview((v) => !v)}>
-            <Eye className="h-4 w-4 mr-1" /> {showPreview ? "ซ่อน" : "ดูคำรายงาน"}
-          </Button>
           <Button variant="outline" onClick={copy}>
             <Copy className="h-4 w-4 mr-1" /> คัดลอก
           </Button>
         </div>
-
-        {showPreview && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">ตัวอย่างคำรายงาน</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea readOnly value={reportText} className="font-mono text-sm min-h-[500px]" />
-            </CardContent>
-          </Card>
-        )}
       </main>
     </div>
   );

@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CompanyIdRouteImport } from './routes/company.$id'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminAdminRouteImport } from './routes/_admin/admin'
+import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as AdminAdminSettingsRouteImport } from './routes/_admin/admin.settings'
 import { Route as AdminAdminReportRouteImport } from './routes/_admin/admin.report'
 
@@ -41,6 +42,11 @@ const AdminAdminRoute = AdminAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminAdminRoute,
+} as any)
 const AdminAdminSettingsRoute = AdminAdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -59,14 +65,15 @@ export interface FileRoutesByFullPath {
   '/company/$id': typeof CompanyIdRoute
   '/admin/report': typeof AdminAdminReportRoute
   '/admin/settings': typeof AdminAdminSettingsRoute
+  '/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminAdminRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
   '/company/$id': typeof CompanyIdRoute
   '/admin/report': typeof AdminAdminReportRoute
   '/admin/settings': typeof AdminAdminSettingsRoute
+  '/admin': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,6 +84,7 @@ export interface FileRoutesById {
   '/company/$id': typeof CompanyIdRoute
   '/_admin/admin/report': typeof AdminAdminReportRoute
   '/_admin/admin/settings': typeof AdminAdminSettingsRoute
+  '/_admin/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,14 +95,15 @@ export interface FileRouteTypes {
     | '/company/$id'
     | '/admin/report'
     | '/admin/settings'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/admin/login'
     | '/company/$id'
     | '/admin/report'
     | '/admin/settings'
+    | '/admin'
   id:
     | '__root__'
     | '/'
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
     | '/company/$id'
     | '/_admin/admin/report'
     | '/_admin/admin/settings'
+    | '/_admin/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -150,6 +160,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_admin/admin/': {
+      id: '/_admin/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminAdminIndexRouteImport
+      parentRoute: typeof AdminAdminRoute
+    }
     '/_admin/admin/settings': {
       id: '/_admin/admin/settings'
       path: '/settings'
@@ -170,11 +187,13 @@ declare module '@tanstack/react-router' {
 interface AdminAdminRouteChildren {
   AdminAdminReportRoute: typeof AdminAdminReportRoute
   AdminAdminSettingsRoute: typeof AdminAdminSettingsRoute
+  AdminAdminIndexRoute: typeof AdminAdminIndexRoute
 }
 
 const AdminAdminRouteChildren: AdminAdminRouteChildren = {
   AdminAdminReportRoute: AdminAdminReportRoute,
   AdminAdminSettingsRoute: AdminAdminSettingsRoute,
+  AdminAdminIndexRoute: AdminAdminIndexRoute,
 }
 
 const AdminAdminRouteWithChildren = AdminAdminRoute._addFileChildren(
@@ -200,3 +219,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

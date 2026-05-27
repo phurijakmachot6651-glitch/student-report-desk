@@ -17,6 +17,8 @@ export const Route = createFileRoute("/_admin/admin/report")({
 
 function ReportPage() {
   const [date, setDate] = useState(todayISO());
+  const [reporterName, setReporterName] = useState("");
+  const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
 
   const { data } = useQuery({
     queryKey: ["report-export", date],
@@ -32,29 +34,41 @@ function ReportPage() {
 
   const fullText = useMemo(() => {
     if (!data) return "";
-    return data.companies
-      .map((c) => {
-        const r = data.reports.find((x) => x.company_id === c.id);
-        const entries: Entry[] = (r?.dispatch_entries || []).map((e: any) => ({
+    
+    let fullStrength = 0;
+    const entries: Entry[] = [];
+    
+    data.companies.forEach((c) => {
+      fullStrength += c.full_strength || 0;
+    });
+
+    let reportTime = "05.45";
+
+    data.reports.forEach((r) => {
+      if (r.report_time && reportTime === "05.45") reportTime = r.report_time;
+
+      (r.dispatch_entries || []).forEach((e: any) => {
+        entries.push({
           category: e.category,
           cadet_name: e.cadet_name,
           reason: e.reason,
           location: e.location,
           subcategory: e.subcategory,
           count: e.count,
-        }));
-        return buildReportText({
-          companyName: c.name,
-          fullStrength: c.full_strength,
-          reportDate: parseISODate(date),
-          reporterName: r?.reporter_name || "-",
-          reporterPosition: r?.reporter_position || "-",
-          reportTime: r?.report_time || "-",
-          entries,
         });
-      })
-      .join("\n\n══════════════════════════\n\n");
-  }, [data, date]);
+      });
+    });
+
+    return buildReportText({
+      companyName: "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)",
+      fullStrength,
+      reportDate: parseISODate(date),
+      reporterName: reporterName || "-",
+      reporterPosition: reporterPosition || "-",
+      reportTime,
+      entries,
+    });
+  }, [data, date, reporterName, reporterPosition]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(fullText);
@@ -77,19 +91,41 @@ function ReportPage() {
         <CardHeader>
           <CardTitle>ส่งออกคำรายงานรวม</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-end gap-3">
+        <CardContent className="space-y-4">
+          <div className="grid sm:grid-cols-3 gap-3 items-end">
             <div>
               <Label>วันที่</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full" />
             </div>
-            <Button onClick={copy} variant="outline">
-              <Copy className="h-4 w-4 mr-1" /> คัดลอกทั้งหมด
-            </Button>
-            <Button onClick={download}>
-              <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด .txt
-            </Button>
+            <div className="sm:col-span-2 flex gap-3">
+              <Button onClick={copy} variant="outline" className="flex-1">
+                <Copy className="h-4 w-4 mr-1" /> คัดลอกทั้งหมด
+              </Button>
+              <Button onClick={download} className="flex-1">
+                <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด .txt
+              </Button>
+            </div>
           </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label>ชื่อผู้รายงาน</Label>
+              <Input
+                value={reporterName}
+                onChange={(e) => setReporterName(e.target.value)}
+                placeholder="นรต.ชนสิษฎ์ ทองย่อน"
+              />
+            </div>
+            <div>
+              <Label>ตำแหน่ง</Label>
+              <Input
+                value={reporterPosition}
+                onChange={(e) => setReporterPosition(e.target.value)}
+                placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค."
+              />
+            </div>
+          </div>
+
           <Textarea readOnly value={fullText} className="font-mono text-sm min-h-[600px]" />
         </CardContent>
       </Card>
