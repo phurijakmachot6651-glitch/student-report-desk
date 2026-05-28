@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { CATEGORY_LABELS, CATEGORY_ORDER, cleanReportEntries, todayISO, type DispatchCategory, type Entry } from "@/lib/thai";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  cleanReportEntries,
+  todayISO,
+  type DispatchCategory,
+  type Entry,
+} from "@/lib/thai";
 
 export const Route = createFileRoute("/company/$id")({
   component: CompanyPage,
@@ -28,7 +35,11 @@ function CompanyPage() {
   const { data: company } = useQuery({
     queryKey: ["company", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("companies").select("id,name,full_strength").eq("id", id).single();
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id,name,full_strength")
+        .eq("id", id)
+        .single();
       if (error) throw error;
       return data;
     },
@@ -39,7 +50,9 @@ function CompanyPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("daily_reports")
-        .select("id,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)")
+        .select(
+          "id,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)",
+        )
         .eq("company_id", id)
         .eq("report_date", date)
         .maybeSingle();
@@ -62,7 +75,7 @@ function CompanyPage() {
           location: entry.location,
           subcategory: entry.subcategory,
           count: entry.count,
-        }))
+        })),
       );
     } else {
       setReporterName("");
@@ -107,13 +120,16 @@ function CompanyPage() {
             reporter_position: reporterPosition,
             report_time: reportTime,
           },
-          { onConflict: "company_id,report_date" }
+          { onConflict: "company_id,report_date" },
         )
         .select()
         .single();
       if (reportError) throw reportError;
 
-      const { error: deleteError } = await supabase.from("dispatch_entries").delete().eq("report_id", savedReport.id);
+      const { error: deleteError } = await supabase
+        .from("dispatch_entries")
+        .delete()
+        .eq("report_id", savedReport.id);
       if (deleteError) throw deleteError;
 
       const cleanedEntries = cleanReportEntries(entries);
@@ -128,7 +144,7 @@ function CompanyPage() {
             subcategory: entry.subcategory,
             count: entry.count,
             display_order,
-          }))
+          })),
         );
         if (entriesError) throw entriesError;
       }
@@ -141,10 +157,13 @@ function CompanyPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
         <div className="mx-auto max-w-3xl px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            to="/"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="h-4 w-4" /> กลับ
           </Link>
           <h1 className="font-bold">{company?.name}</h1>
@@ -164,21 +183,35 @@ function CompanyPage() {
             </div>
             <div>
               <Label>เวลารายงาน</Label>
-              <Input value={reportTime} onChange={(e) => setReportTime(e.target.value)} placeholder="05.45" />
+              <Input
+                value={reportTime}
+                onChange={(e) => setReportTime(e.target.value)}
+                placeholder="05.45"
+              />
             </div>
             <div className="sm:col-span-2">
               <Label>ชื่อผู้ควบคุมแถว</Label>
-              <Input value={reporterName} onChange={(e) => setReporterName(e.target.value)} placeholder="นรต.ชนสิษฎ์ ทองย่อน" />
+              <Input
+                value={reporterName}
+                onChange={(e) => setReporterName(e.target.value)}
+                placeholder="นรต.วิจัย กรณี"
+              />
             </div>
             <div className="sm:col-span-2">
               <Label>เลขที่ในหมวด</Label>
-              <Input value={reporterPosition} onChange={(e) => setReporterPosition(e.target.value)} placeholder="๑" />
+              <Input
+                value={reporterPosition}
+                onChange={(e) => setReporterPosition(e.target.value)}
+                placeholder="๐"
+              />
             </div>
           </CardContent>
         </Card>
 
         {CATEGORY_ORDER.map((category) => {
-          const list = entries.map((entry, i) => ({ entry, i })).filter((item) => item.entry.category === category);
+          const list = entries
+            .map((entry, i) => ({ entry, i }))
+            .filter((item) => item.entry.category === category);
           return (
             <Card key={category}>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -190,11 +223,26 @@ function CompanyPage() {
               <CardContent className="space-y-3">
                 {list.length === 0 && <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>}
                 {list.map(({ entry, i }) => (
-                  <div key={entry.id ?? entry._local} className="border rounded-md p-3 space-y-2 bg-slate-50">
+                  <div
+                    key={entry.id ?? entry._local}
+                    className="border rounded-md p-3 space-y-2 bg-muted/30"
+                  >
                     {category === "other" ? (
                       <div className="grid grid-cols-[1fr_100px_auto] gap-2">
-                        <Input placeholder="หัวข้อ เช่น โปโล" value={entry.subcategory} onChange={(event) => updateEntry(i, { subcategory: event.target.value })} />
-                        <Input type="number" min={0} value={entry.count} onChange={(event) => updateEntry(i, { count: Number(event.target.value) })} placeholder="จำนวน" />
+                        <Input
+                          placeholder="หัวข้อ เช่น โปโล"
+                          value={entry.subcategory}
+                          onChange={(event) => updateEntry(i, { subcategory: event.target.value })}
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          value={entry.count}
+                          onChange={(event) =>
+                            updateEntry(i, { count: Number(event.target.value) })
+                          }
+                          placeholder="จำนวน"
+                        />
                         <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -202,14 +250,26 @@ function CompanyPage() {
                     ) : (
                       <>
                         <div className="flex gap-2">
-                          <Input placeholder="ชื่อ เช่น ชยานันท์ พ." value={entry.cadet_name} onChange={(event) => updateEntry(i, { cadet_name: event.target.value })} />
+                          <Input
+                            placeholder="ชื่อ เช่น วิจัย ก."
+                            value={entry.cadet_name}
+                            onChange={(event) => updateEntry(i, { cadet_name: event.target.value })}
+                          />
                           <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-2">
-                          <Input placeholder="สาเหตุ" value={entry.reason} onChange={(event) => updateEntry(i, { reason: event.target.value })} />
-                          <Input placeholder="สถานที่" value={entry.location} onChange={(event) => updateEntry(i, { location: event.target.value })} />
+                          <Input
+                            placeholder="สาเหตุ"
+                            value={entry.reason}
+                            onChange={(event) => updateEntry(i, { reason: event.target.value })}
+                          />
+                          <Input
+                            placeholder="สถานที่"
+                            value={entry.location}
+                            onChange={(event) => updateEntry(i, { location: event.target.value })}
+                          />
                         </div>
                       </>
                     )}

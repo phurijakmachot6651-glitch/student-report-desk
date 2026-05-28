@@ -29,11 +29,15 @@ function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-      <header className="border-b bg-white/80 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+      <header className="border-b bg-card/80 backdrop-blur">
         <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
+            <img
+              src="/tiger_logo.png"
+              alt="Tiger Logo"
+              className="h-8 w-8 object-contain rounded-full border border-primary/20"
+            />
             <h1 className="font-bold text-lg">ยอดกำลังพล นรต. กองร้อยที่ ๒</h1>
           </div>
           <Link to="/admin/login">
@@ -64,7 +68,9 @@ function Home() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">ยอดเต็ม {company.full_strength} นาย</p>
+                    <p className="text-sm text-muted-foreground">
+                      ยอดเต็ม {company.full_strength} นาย
+                    </p>
                   </CardContent>
                 </Card>
               </Link>

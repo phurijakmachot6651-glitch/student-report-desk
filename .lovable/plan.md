@@ -1,7 +1,7 @@
-
 # ระบบจัดทำยอดกำลังพลนักเรียนนายร้อยตำรวจ
 
 ## สรุปการตัดสินใจ
+
 - **9 หมวด**: ใช้ชื่อ "หมวด ๑" ถึง "หมวด ๙"
 - **การเข้าระบบ**:
   - ผู้แทนหมวด → **ไม่ต้องล็อกอิน** เปิดเว็บแล้วเลือกหมวดของตนจากหน้าแรก แล้วกรอกยอดได้เลย
@@ -9,22 +9,26 @@
 - **ยอดเต็ม**: แอดมินตั้งค่ารายหมวดได้; ยอดเต็มรวม = ผลรวม 9 หมวด
 
 ## บทบาทผู้ใช้
+
 - **สาธารณะ (ผู้แทนหมวด)** — เลือกหมวด → กรอก/แก้ไขยอดของวันที่เลือก
 - **แอดมิน (login)** — ตั้งยอดเต็ม/ชื่อหมวด, ดูยอดรวมทั้ง 9 หมวด, ส่งออกคำรายงาน, ลบ/แก้ไขรายงานย้อนหลัง
 
 ## โครงสร้างฐานข้อมูล (Lovable Cloud)
+
 - `companies` (9 หมวด, seed): id, name, full_strength, display_order
-- `daily_reports`: id, company_id, report_date, reporter_name, reporter_position, report_time  
-  *unique (company_id, report_date)*
+- `daily_reports`: id, company*id, report_date, reporter_name, reporter_position, report_time  
+  \_unique (company_id, report_date)*
 - `dispatch_entries`: id, report_id, category (sick/leave/absent/official/suspended/other), cadet_name, reason, location, subcategory, count
 - `user_roles`: user_id, role='admin' (ฟังก์ชัน `has_role()` SECURITY DEFINER)
 
 ### RLS
+
 - `companies` — public SELECT; admin UPDATE
 - `daily_reports`, `dispatch_entries` — public SELECT/INSERT/UPDATE/DELETE (เพราะผู้แทนหมวดไม่ล็อกอิน) **แต่** การลบ/แก้ไขผ่าน UI จำกัดเฉพาะหน้า admin; การเขียนจากหน้า public ทำผ่าน server function ที่ตรวจ company_id + report_date เพื่อกัน spam
 - `user_roles` — admin เท่านั้น
 
 ## หน้าจอ
+
 1. `/` — หน้าแรก: การ์ด 9 หมวดให้เลือก + ลิงก์ "เข้าสู่ระบบแอดมิน" มุมขวาบน
 2. `/company/$id` — เลือกวันที่, กรอกข้อมูลผู้รายงาน, เพิ่ม/แก้ไขรายการใน 6 หมวดจำหน่าย (ป่วย/ลา/ขาด/ราชการ/พักการศึกษา/อื่น ๆ), สรุปยอดอัตโนมัติ, ปุ่ม "ดูตัวอย่างคำรายงาน" + "คัดลอกข้อความ"
 3. `/admin/login` — อีเมล/รหัสผ่าน
@@ -33,6 +37,7 @@
 6. `/admin/report` — ส่งออกคำรายงาน: รายหมวด หรือ รวม 9 หมวด เป็นข้อความตามแบบฟอร์ม (คัดลอก / ดาวน์โหลด .txt)
 
 ## รูปแบบคำรายงาน (ตามตัวอย่าง)
+
 - เลขไทย (๐–๙), วันที่ภาษาไทยเต็มรูปแบบ
 - หัวกระดาษ + บรรทัดผู้รายงาน + เส้น `****`
 - บล็อกสรุป: ยอดเต็ม / จำหน่ายรวม / คงเหลือ
@@ -42,11 +47,14 @@
 - ปิดท้าย "จึงเรียนมาเพื่อโปรดทราบ"
 
 ## หมายเหตุด้านความปลอดภัย
+
 เนื่องจากหน้าผู้แทนหมวด**เปิดสาธารณะ** ใครก็เข้ามากรอก/แก้ไขยอดได้ จะมีผลข้างเคียงคือ:
+
 - ใครก็เข้าถึงเว็บได้สามารถส่งยอดมั่วได้
 - ทางลดความเสี่ยง: แอดมินสามารถแก้ไข/ลบรายงานในหน้า admin ได้ตลอด และอาจเพิ่ม "รหัสผ่านหมวด" (PIN) ภายหลังถ้าต้องการ
 
 ## เทคนิค
+
 - TanStack Start + Lovable Cloud (Supabase) + shadcn/ui
 - Auth: email/password เฉพาะแอดมิน; สร้างบัญชีแอดมินตัวแรกหลังเปิด Cloud
 - Helper: arabic↔thai numerals, Thai date formatter, report text builder

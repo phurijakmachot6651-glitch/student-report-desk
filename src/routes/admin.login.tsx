@@ -34,7 +34,9 @@ function AdminLogin() {
   const onSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const result = await registerAdmin({ data: { email, password, secretCode } }).catch((error) => ({ error }));
+    const result = await registerAdmin({ data: { email, password, secretCode } }).catch(
+      (error) => ({ error }),
+    );
     setLoading(false);
     if ("error" in result) return toast.error(result.error.message || "สมัครไม่สำเร็จ");
 
@@ -45,13 +47,23 @@ function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-4 hover:text-foreground">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-4 hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> หน้าแรก
         </Link>
         <Card>
-          <CardHeader>
+          <CardHeader className="text-center flex flex-col items-center">
+            <div className="mb-2">
+              <img
+                src="/tiger_logo.png"
+                alt="Tiger Logo"
+                className="h-16 w-16 object-contain rounded-full border-2 border-primary/20 shadow-sm"
+              />
+            </div>
             <CardTitle>แอดมิน</CardTitle>
             <CardDescription>ระบบจัดทำยอดกำลังพล นรต.</CardDescription>
           </CardHeader>
@@ -65,11 +77,21 @@ function AdminLogin() {
                 <form onSubmit={onLogin} className="space-y-3">
                   <div>
                     <Label>อีเมล</Label>
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
                   </div>
                   <div>
                     <Label>รหัสผ่าน</Label>
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
@@ -80,20 +102,35 @@ function AdminLogin() {
                 <form onSubmit={onSignup} className="space-y-3">
                   <div>
                     <Label>อีเมล</Label>
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <Input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
                   </div>
                   <div>
                     <Label>รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</Label>
-                    <Input type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    <Input
+                      type="password"
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
                   </div>
                   <div>
                     <Label>Secret code</Label>
-                    <Input type="password" value={secretCode} onChange={(e) => setSecretCode(e.target.value)} required />
+                    <Input
+                      type="password"
+                      value={secretCode}
+                      onChange={(e) => setSecretCode(e.target.value)}
+                      required
+                    />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "กำลังสมัคร..." : "สมัครและเข้าสู่ระบบ"}
                   </Button>
-                  <p className="text-xs text-muted-foreground">ต้องใช้ secret code ที่ตั้งไว้ในหน้า Admin Settings</p>
                 </form>
               </TabsContent>
             </Tabs>

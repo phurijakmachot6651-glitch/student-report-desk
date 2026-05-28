@@ -41,7 +41,10 @@ function ReportPage() {
   const { data: reporters } = useQuery({
     queryKey: ["reporters"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("reporters").select("id,name,display_order").order("display_order");
+      const { data, error } = await supabase
+        .from("reporters")
+        .select("id,name,display_order")
+        .order("display_order");
       if (error) throw error;
       return data || [];
     },
@@ -51,7 +54,10 @@ function ReportPage() {
     if (!data) return "";
 
     const entries: Entry[] = [];
-    const fullStrength = data.companies.reduce((sum, company) => sum + (company.full_strength || 0), 0);
+    const fullStrength = data.companies.reduce(
+      (sum, company) => sum + (company.full_strength || 0),
+      0,
+    );
 
     data.reports.forEach((report) => {
       (report.dispatch_entries || []).forEach((entry: any) => {
@@ -67,7 +73,8 @@ function ReportPage() {
     });
 
     return buildReportText({
-      companyName: "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)",
+      companyName:
+        "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)",
       fullStrength,
       reportDate: parseISODate(date),
       reporterName: reporterName || "-",
@@ -102,11 +109,20 @@ function ReportPage() {
           <div className="grid sm:grid-cols-3 gap-3 items-end">
             <div>
               <Label>วันที่</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full" />
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full"
+              />
             </div>
             <div>
               <Label>เวลารายงาน</Label>
-              <Input value={reportTime} onChange={(e) => setReportTime(e.target.value)} placeholder="05.45" />
+              <Input
+                value={reportTime}
+                onChange={(e) => setReportTime(e.target.value)}
+                placeholder="05.45"
+              />
             </div>
             <div className="flex gap-3">
               <Button onClick={copy} variant="outline" className="flex-1">
@@ -150,7 +166,11 @@ function ReportPage() {
             </div>
             <div className="sm:col-span-2">
               <Label>ตำแหน่ง</Label>
-              <Input value={reporterPosition} onChange={(e) => setReporterPosition(e.target.value)} placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค." />
+              <Input
+                value={reporterPosition}
+                onChange={(e) => setReporterPosition(e.target.value)}
+                placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค."
+              />
             </div>
           </div>
 

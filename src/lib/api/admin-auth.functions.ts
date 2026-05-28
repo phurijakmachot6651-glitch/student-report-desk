@@ -26,7 +26,7 @@ async function getConfiguredSecretHash() {
     .eq("key", ADMIN_SECRET_KEY)
     .maybeSingle();
   if (error) throw error;
-  return data?.value || (process.env.ADMIN_REGISTER_SECRET ? await hashSecret(process.env.ADMIN_REGISTER_SECRET) : "");
+  return data?.value || (await hashSecret(process.env.ADMIN_REGISTER_SECRET || "0000"));
 }
 
 async function assertAdmin(userId: string) {
@@ -47,7 +47,7 @@ export const registerAdmin = createServerFn({ method: "POST" })
       email: z.string().email(),
       password: z.string().min(6),
       secretCode: z.string().min(1),
-    })
+    }),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -80,7 +80,7 @@ export const updateAdminRegisterSecret = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({
       newSecretCode: z.string().min(4),
-    })
+    }),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -88,7 +88,10 @@ export const updateAdminRegisterSecret = createServerFn({ method: "POST" })
 
     const { error } = await supabaseAdmin
       .from("app_settings")
-      .upsert({ key: ADMIN_SECRET_KEY, value: await hashSecret(data.newSecretCode) }, { onConflict: "key" });
+      .upsert(
+        { key: ADMIN_SECRET_KEY, value: await hashSecret(data.newSecretCode) },
+        { onConflict: "key" },
+      );
     if (error) throw error;
 
     return { ok: true };

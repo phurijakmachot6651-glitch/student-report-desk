@@ -37,22 +37,38 @@ function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/admin" className="flex items-center gap-2 font-bold">
-              <Shield className="h-5 w-5 text-primary" />
+              <img
+                src="/tiger_logo.png"
+                alt="Tiger Logo"
+                className="h-6 w-6 object-contain rounded-full border border-primary/20"
+              />
               แอดมิน
             </Link>
             <nav className="flex items-center gap-1 text-sm">
-              <Link to="/admin" className="px-3 py-1.5 rounded hover:bg-slate-100" activeProps={{ className: "px-3 py-1.5 rounded bg-slate-100 font-medium" }}>
+              <Link
+                to="/admin"
+                className="px-3 py-1.5 rounded hover:bg-secondary/40"
+                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
+              >
                 สรุปยอด
               </Link>
-              <Link to="/admin/report" className="px-3 py-1.5 rounded hover:bg-slate-100" activeProps={{ className: "px-3 py-1.5 rounded bg-slate-100 font-medium" }}>
+              <Link
+                to="/admin/report"
+                className="px-3 py-1.5 rounded hover:bg-secondary/40"
+                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
+              >
                 ส่งออกรายงาน
               </Link>
-              <Link to="/admin/settings" className="px-3 py-1.5 rounded hover:bg-slate-100" activeProps={{ className: "px-3 py-1.5 rounded bg-slate-100 font-medium" }}>
+              <Link
+                to="/admin/settings"
+                className="px-3 py-1.5 rounded hover:bg-secondary/40"
+                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
+              >
                 ตั้งค่า
               </Link>
             </nav>

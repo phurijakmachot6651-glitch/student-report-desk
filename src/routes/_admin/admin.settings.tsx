@@ -26,7 +26,10 @@ function Settings() {
   const { data: companies } = useQuery({
     queryKey: ["companies"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("companies").select("id,name,full_strength,display_order").order("display_order");
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id,name,full_strength,display_order")
+        .order("display_order");
       if (error) throw error;
       return data || [];
     },
@@ -35,14 +38,20 @@ function Settings() {
   const { data: reporters } = useQuery({
     queryKey: ["reporters"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("reporters").select("id,name,display_order").order("display_order");
+      const { data, error } = await supabase
+        .from("reporters")
+        .select("id,name,display_order")
+        .order("display_order");
       if (error) throw error;
       return data || [];
     },
   });
 
   useEffect(() => {
-    if (companies) setCompanyRows(companies.map((c) => ({ id: c.id, name: c.name, full_strength: c.full_strength })));
+    if (companies)
+      setCompanyRows(
+        companies.map((c) => ({ id: c.id, name: c.name, full_strength: c.full_strength })),
+      );
   }, [companies]);
 
   useEffect(() => {
@@ -58,7 +67,7 @@ function Settings() {
             .update({ name: row.name.trim(), full_strength: row.full_strength })
             .eq("id", row.id);
           if (error) throw error;
-        })
+        }),
       );
     },
     onSuccess: () => {
@@ -82,13 +91,26 @@ function Settings() {
         if (error) throw error;
       }
 
-      if (rows.length > 0) {
-        const { error } = await supabase.from("reporters").upsert(
-          rows.map((row) => ({
-            ...(row.id ? { id: row.id } : {}),
+      const newRows = rows.filter((r) => !r.id);
+      const existingRows = rows.filter((r) => r.id);
+
+      if (newRows.length > 0) {
+        const { error } = await supabase.from("reporters").insert(
+          newRows.map((row) => ({
             name: row.name,
             display_order: row.display_order,
-          }))
+          })),
+        );
+        if (error) throw error;
+      }
+
+      if (existingRows.length > 0) {
+        const { error } = await supabase.from("reporters").upsert(
+          existingRows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            display_order: row.display_order,
+          })),
         );
         if (error) throw error;
       }
@@ -122,12 +144,22 @@ function Settings() {
             <div key={r.id} className="grid grid-cols-[1fr_140px] gap-2">
               <Input
                 value={r.name}
-                onChange={(e) => setCompanyRows((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                onChange={(e) =>
+                  setCompanyRows((p) =>
+                    p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                  )
+                }
               />
               <Input
                 type="number"
                 value={r.full_strength}
-                onChange={(e) => setCompanyRows((p) => p.map((x, j) => (j === i ? { ...x, full_strength: Number(e.target.value) } : x)))}
+                onChange={(e) =>
+                  setCompanyRows((p) =>
+                    p.map((x, j) =>
+                      j === i ? { ...x, full_strength: Number(e.target.value) } : x,
+                    ),
+                  )
+                }
                 placeholder="ยอดเต็ม"
               />
             </div>
@@ -147,16 +179,29 @@ function Settings() {
             <div key={r.id ?? r._local} className="grid grid-cols-[1fr_auto] gap-2">
               <Input
                 value={r.name}
-                onChange={(e) => setReporterRows((p) => p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                onChange={(e) =>
+                  setReporterRows((p) =>
+                    p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                  )
+                }
                 placeholder="ชื่อผู้รายงาน"
               />
-              <Button size="icon" variant="ghost" onClick={() => setReporterRows((p) => p.filter((_, j) => j !== i))}>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setReporterRows((p) => p.filter((_, j) => j !== i))}
+              >
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </div>
           ))}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setReporterRows((p) => [...p, { _local: crypto.randomUUID(), name: "" }])}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setReporterRows((p) => [...p, { _local: crypto.randomUUID(), name: "" }])
+              }
+            >
               <Plus className="h-4 w-4 mr-1" /> เพิ่มชื่อ
             </Button>
             <Button onClick={() => saveReporters.mutate()} disabled={saveReporters.isPending}>
@@ -173,9 +218,18 @@ function Settings() {
         <CardContent className="space-y-3">
           <div>
             <Label>Secret code ใหม่</Label>
-            <Input type="password" value={newSecretCode} onChange={(e) => setNewSecretCode(e.target.value)} minLength={4} />
+            <Input
+              type="password"
+              value={newSecretCode}
+              onChange={(e) => setNewSecretCode(e.target.value)}
+              minLength={4}
+            />
+            <p className="text-xs text-muted-foreground mt-1">ค่าเริ่มต้นคือ 0000</p>
           </div>
-          <Button onClick={() => saveSecret.mutate()} disabled={saveSecret.isPending || newSecretCode.trim().length < 4}>
+          <Button
+            onClick={() => saveSecret.mutate()}
+            disabled={saveSecret.isPending || newSecretCode.trim().length < 4}
+          >
             {saveSecret.isPending ? "กำลังบันทึก..." : "ตั้งค่า secret code"}
           </Button>
         </CardContent>

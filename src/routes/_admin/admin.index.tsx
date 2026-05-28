@@ -5,7 +5,14 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { todayISO } from "@/lib/thai";
 
@@ -20,10 +27,15 @@ function AdminDashboard() {
     queryKey: ["admin-summary", date],
     queryFn: async () => {
       const [companiesResult, reportsResult] = await Promise.all([
-        supabase.from("companies").select("id,name,full_strength,display_order").order("display_order"),
+        supabase
+          .from("companies")
+          .select("id,name,full_strength,display_order")
+          .order("display_order"),
         supabase
           .from("daily_reports")
-          .select("id,company_id,reporter_name,reporter_position,report_time,dispatch_entries(category,count)")
+          .select(
+            "id,company_id,reporter_name,reporter_position,report_time,dispatch_entries(category,count)",
+          )
           .eq("report_date", date),
       ]);
       if (companiesResult.error) throw companiesResult.error;
@@ -32,7 +44,9 @@ function AdminDashboard() {
     },
   });
 
-  const reportsByCompany = new Map((data?.reports || []).map((report) => [report.company_id, report]));
+  const reportsByCompany = new Map(
+    (data?.reports || []).map((report) => [report.company_id, report]),
+  );
 
   const rows = (data?.companies || []).map((company) => {
     const report = reportsByCompany.get(company.id);
@@ -57,7 +71,12 @@ function AdminDashboard() {
       <div className="flex items-end gap-4">
         <div>
           <Label>วันที่</Label>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-48"
+          />
         </div>
       </div>
 
@@ -98,7 +117,11 @@ function AdminDashboard() {
                   {row.report?.reporter_name ? (
                     <span>
                       {row.report.reporter_name}
-                      {row.report.reporter_position && <span className="text-xs text-muted-foreground ml-1">(เลขที่ {row.report.reporter_position})</span>}
+                      {row.report.reporter_position && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          (เลขที่ {row.report.reporter_position})
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">-</span>
@@ -108,9 +131,19 @@ function AdminDashboard() {
                 <TableCell className="text-right">{row.company.full_strength}</TableCell>
                 <TableCell className="text-right">{row.dispatched}</TableCell>
                 <TableCell className="text-right">{row.remaining}</TableCell>
-                <TableCell>{row.report ? <Badge>ส่งแล้ว</Badge> : <Badge variant="secondary">ยังไม่ส่ง</Badge>}</TableCell>
+                <TableCell>
+                  {row.report ? (
+                    <Badge>ส่งแล้ว</Badge>
+                  ) : (
+                    <Badge variant="secondary">ยังไม่ส่ง</Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
-                  <Link to="/company/$id" params={{ id: row.company.id }} className="text-sm text-primary hover:underline">
+                  <Link
+                    to="/company/$id"
+                    params={{ id: row.company.id }}
+                    className="text-sm text-primary hover:underline"
+                  >
                     ดู/แก้ไข
                   </Link>
                 </TableCell>
