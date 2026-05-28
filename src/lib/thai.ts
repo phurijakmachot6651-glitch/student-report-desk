@@ -40,7 +40,14 @@ export const CATEGORY_LABELS: Record<DispatchCategory, string> = {
   other: "อื่น ๆ",
 };
 
-export const CATEGORY_ORDER: DispatchCategory[] = ["sick", "leave", "absent", "official", "suspended", "other"];
+export const CATEGORY_ORDER: DispatchCategory[] = [
+  "sick",
+  "leave",
+  "absent",
+  "official",
+  "suspended",
+  "other",
+];
 
 export type Entry = {
   category: DispatchCategory;
@@ -98,10 +105,12 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
         acc[e.subcategory] = (acc[e.subcategory] || 0) + (e.count || 0);
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
-    const lines = Object.entries(grouped).map(([key, count]) => `   - ${key}                  ${toThaiNumerals(count)} นาย`);
+    const lines = Object.entries(grouped).map(
+      ([key, count]) => `   - ${key}                  ${toThaiNumerals(count)} นาย`,
+    );
     return [head, ...lines].join("\n");
   }
   const lines = list.map((e) => {
@@ -125,7 +134,6 @@ export function buildReportText(input: ReportInput): string {
     "",
     `กระผม ${input.reporterName || "-"}`,
     `${input.reporterPosition || "-"}`,
-    "",
     `ขออนุญาตรายงานยอดกำลังพลของนักเรียนนายร้อยตำรวจชั้นปีที่ ๒ รุ่นที่ ๘๒ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
     "",
     `📌 ยอดเต็ม                   ${toThaiNumerals(input.fullStrength)} นาย`,
@@ -134,7 +142,7 @@ export function buildReportText(input: ReportInput): string {
     "",
   ].join("\n");
 
-  const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n\n");
+  const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n");
 
   return `${header}${body}\n\nจึงเรียนมาเพื่อโปรดทราบ\n`;
 }
