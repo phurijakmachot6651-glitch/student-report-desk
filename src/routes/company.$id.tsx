@@ -12,6 +12,7 @@ import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   cleanReportEntries,
+  normalizeOtherSubcategory,
   todayISO,
   type DispatchCategory,
   type Entry,
@@ -22,6 +23,11 @@ export const Route = createFileRoute("/company/$id")({
 });
 
 type EntryRow = Entry & { id?: string; _local?: string };
+type OtherOption = {
+  name: string;
+  count: number;
+  companyNames: string[];
+};
 
 function CompanyPage() {
   const { id } = useParams({ from: "/company/$id" });
@@ -58,6 +64,43 @@ function CompanyPage() {
         .maybeSingle();
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: otherOptions = [] } = useQuery({
+    queryKey: ["other-options", id, date],
+    queryFn: async (): Promise<OtherOption[]> => {
+      const { data, error } = await supabase
+        .from("daily_reports")
+        .select("company_id,companies(name),dispatch_entries(category,subcategory,count)")
+        .eq("report_date", date)
+        .neq("company_id", id);
+      if (error) throw error;
+
+      const grouped = new Map<string, OtherOption>();
+
+      (data || []).forEach((dailyReport: any) => {
+        const companyName = dailyReport.companies?.name || "";
+
+        (dailyReport.dispatch_entries || []).forEach((entry: any) => {
+          if (entry.category !== "other") return;
+
+          const name = normalizeOtherSubcategory(entry.subcategory || "");
+          if (!name) return;
+
+          const count = Number(entry.count) || 0;
+          if (count <= 0) return;
+
+          const current = grouped.get(name) || { name, count: 0, companyNames: [] };
+          current.count += count;
+          if (companyName && !current.companyNames.includes(companyName)) {
+            current.companyNames.push(companyName);
+          }
+          grouped.set(name, current);
+        });
+      });
+
+      return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name, "th"));
     },
   });
 
@@ -108,6 +151,10 @@ function CompanyPage() {
     setEntries((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const selectOtherSubcategory = (idx: number, subcategory: string) => {
+    updateEntry(idx, { subcategory, count: Math.max(1, entries[idx]?.count || 1) });
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       const { data: savedReport, error: reportError } = await supabase
@@ -152,6 +199,7 @@ function CompanyPage() {
     onSuccess: () => {
       toast.success("บันทึกเรียบร้อย");
       qc.invalidateQueries({ queryKey: ["report", id, date] });
+      qc.invalidateQueries({ queryKey: ["other-options"] });
     },
     onError: (error: any) => toast.error(error.message || "บันทึกไม่สำเร็จ"),
   });
@@ -228,25 +276,57 @@ function CompanyPage() {
                     className="border rounded-md p-3 space-y-2 bg-muted/30"
                   >
                     {category === "other" ? (
-                      <div className="grid grid-cols-[1fr_100px_auto] gap-2">
-                        <Input
-                          placeholder="หัวข้อ เช่น โปโล"
-                          value={entry.subcategory}
-                          onChange={(event) => updateEntry(i, { subcategory: event.target.value })}
-                        />
-                        <Input
-                          type="number"
-                          min={0}
-                          value={entry.count}
-                          onChange={(event) =>
-                            updateEntry(i, { count: Number(event.target.value) })
-                          }
-                          placeholder="จำนวน"
-                        />
-                        <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
+                      <>
+                        <div className="grid grid-cols-[1fr_100px_auto] gap-2">
+                          <Input
+                            list={`other-options-${i}`}
+                            placeholder="หัวข้อ"
+                            value={entry.subcategory}
+                            onChange={(event) =>
+                              updateEntry(i, { subcategory: event.target.value })
+                            }
+                          />
+                          <datalist id={`other-options-${i}`}>
+                            {otherOptions.map((option) => (
+                              <option key={option.name} value={option.name} />
+                            ))}
+                          </datalist>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={entry.count}
+                            onChange={(event) =>
+                              updateEntry(i, { count: Number(event.target.value) })
+                            }
+                            placeholder="จำนวน"
+                          />
+                          <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+
+                        {otherOptions.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {otherOptions.map((option) => {
+                              const selected =
+                                normalizeOtherSubcategory(entry.subcategory) === option.name;
+
+                              return (
+                                <Button
+                                  key={option.name}
+                                  type="button"
+                                  size="sm"
+                                  variant={selected ? "default" : "outline"}
+                                  onClick={() => selectOtherSubcategory(i, option.name)}
+                                  title={`มีใน ${option.companyNames.join(", ") || "หมวดอื่น"} รวม ${option.count} นาย`}
+                                >
+                                  {option.name}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <>
                         <div className="flex gap-2">

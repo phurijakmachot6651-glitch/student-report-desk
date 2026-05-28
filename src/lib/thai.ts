@@ -68,6 +68,10 @@ export type ReportInput = {
   entries: Entry[];
 };
 
+export function normalizeOtherSubcategory(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 export function cleanReportEntries(entries: Entry[]): Entry[] {
   return entries
     .map((entry) => ({
@@ -75,7 +79,7 @@ export function cleanReportEntries(entries: Entry[]): Entry[] {
       cadet_name: entry.cadet_name.trim(),
       reason: entry.reason.trim(),
       location: entry.location.trim(),
-      subcategory: entry.subcategory.trim(),
+      subcategory: normalizeOtherSubcategory(entry.subcategory),
       count: Number(entry.count) || 0,
     }))
     .filter((entry) => {
