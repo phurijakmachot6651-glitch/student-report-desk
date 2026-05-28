@@ -21,7 +21,7 @@ function Home() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("companies")
-        .select("*")
+        .select("id,name,full_strength,display_order")
         .order("display_order");
       if (error) throw error;
       return data;
@@ -34,10 +34,12 @@ function Home() {
         <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="h-6 w-6 text-primary" />
-            <h1 className="font-bold text-lg">ยอดกำลังพล นรต.</h1>
+            <h1 className="font-bold text-lg">ยอดกำลังพล นรต. กองร้อยที่ ๒</h1>
           </div>
           <Link to="/admin/login">
-            <Button variant="outline" size="sm">เข้าสู่ระบบแอดมิน</Button>
+            <Button variant="outline" size="sm">
+              Login
+            </Button>
           </Link>
         </div>
       </header>
@@ -52,17 +54,17 @@ function Home() {
           <p className="text-center text-muted-foreground">กำลังโหลด...</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {companies?.map((c) => (
-              <Link key={c.id} to="/company/$id" params={{ id: c.id }}>
+            {companies?.map((company) => (
+              <Link key={company.id} to="/company/$id" params={{ id: company.id }}>
                 <Card className="hover:shadow-lg transition-shadow cursor-pointer hover:border-primary">
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-primary" />
-                      {c.name}
+                      {company.name}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">ยอดเต็ม {c.full_strength} นาย</p>
+                    <p className="text-sm text-muted-foreground">ยอดเต็ม {company.full_strength} นาย</p>
                   </CardContent>
                 </Card>
               </Link>

@@ -1,17 +1,14 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, ArrowLeft, Copy } from "lucide-react";
+import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import {
-  CATEGORY_LABELS, CATEGORY_ORDER, buildReportText, parseISODate,
-  todayISO, type DispatchCategory, type Entry,
-} from "@/lib/thai";
+import { CATEGORY_LABELS, CATEGORY_ORDER, cleanReportEntries, todayISO, type DispatchCategory, type Entry } from "@/lib/thai";
 
 export const Route = createFileRoute("/company/$id")({
   component: CompanyPage,
@@ -31,7 +28,7 @@ function CompanyPage() {
   const { data: company } = useQuery({
     queryKey: ["company", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("companies").select("*").eq("id", id).single();
+      const { data, error } = await supabase.from("companies").select("id,name,full_strength").eq("id", id).single();
       if (error) throw error;
       return data;
     },
@@ -40,12 +37,13 @@ function CompanyPage() {
   const { data: report } = useQuery({
     queryKey: ["report", id, date],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("daily_reports")
-        .select("*, dispatch_entries(*)")
+        .select("id,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)")
         .eq("company_id", id)
         .eq("report_date", date)
         .maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
@@ -55,16 +53,17 @@ function CompanyPage() {
       setReporterName(report.reporter_name || "");
       setReporterPosition(report.reporter_position || "");
       setReportTime(report.report_time || "05.45");
-      const es: EntryRow[] = (report.dispatch_entries || []).map((e: any) => ({
-        id: e.id,
-        category: e.category,
-        cadet_name: e.cadet_name,
-        reason: e.reason,
-        location: e.location,
-        subcategory: e.subcategory,
-        count: e.count,
-      }));
-      setEntries(es);
+      setEntries(
+        (report.dispatch_entries || []).map((entry: any) => ({
+          id: entry.id,
+          category: entry.category,
+          cadet_name: entry.cadet_name,
+          reason: entry.reason,
+          location: entry.location,
+          subcategory: entry.subcategory,
+          count: entry.count,
+        }))
+      );
     } else {
       setReporterName("");
       setReporterPosition("");
@@ -73,12 +72,12 @@ function CompanyPage() {
     }
   }, [report?.id]);
 
-  const addEntry = (cat: DispatchCategory) => {
+  const addEntry = (category: DispatchCategory) => {
     setEntries((prev) => [
       ...prev,
       {
         _local: crypto.randomUUID(),
-        category: cat,
+        category,
         cadet_name: "",
         reason: "",
         location: "",
@@ -89,7 +88,7 @@ function CompanyPage() {
   };
 
   const updateEntry = (idx: number, patch: Partial<EntryRow>) => {
-    setEntries((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+    setEntries((prev) => prev.map((entry, i) => (i === idx ? { ...entry, ...patch } : entry)));
   };
 
   const removeEntry = (idx: number) => {
@@ -98,8 +97,7 @@ function CompanyPage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      // Upsert report
-      const { data: r, error: rErr } = await supabase
+      const { data: savedReport, error: reportError } = await supabase
         .from("daily_reports")
         .upsert(
           {
@@ -113,50 +111,34 @@ function CompanyPage() {
         )
         .select()
         .single();
-      if (rErr) throw rErr;
+      if (reportError) throw reportError;
 
-      // Replace entries
-      await supabase.from("dispatch_entries").delete().eq("report_id", r.id);
-      if (entries.length > 0) {
-        const { error: eErr } = await supabase.from("dispatch_entries").insert(
-          entries.map((e, i) => ({
-            report_id: r.id,
-            category: e.category,
-            cadet_name: e.cadet_name,
-            reason: e.reason,
-            location: e.location,
-            subcategory: e.subcategory,
-            count: e.count,
-            display_order: i,
+      const { error: deleteError } = await supabase.from("dispatch_entries").delete().eq("report_id", savedReport.id);
+      if (deleteError) throw deleteError;
+
+      const cleanedEntries = cleanReportEntries(entries);
+      if (cleanedEntries.length > 0) {
+        const { error: entriesError } = await supabase.from("dispatch_entries").insert(
+          cleanedEntries.map((entry, display_order) => ({
+            report_id: savedReport.id,
+            category: entry.category,
+            cadet_name: entry.cadet_name,
+            reason: entry.reason,
+            location: entry.location,
+            subcategory: entry.subcategory,
+            count: entry.count,
+            display_order,
           }))
         );
-        if (eErr) throw eErr;
+        if (entriesError) throw entriesError;
       }
     },
     onSuccess: () => {
       toast.success("บันทึกเรียบร้อย");
       qc.invalidateQueries({ queryKey: ["report", id, date] });
     },
-    onError: (e: any) => toast.error(e.message || "บันทึกไม่สำเร็จ"),
+    onError: (error: any) => toast.error(error.message || "บันทึกไม่สำเร็จ"),
   });
-
-  const reportText = useMemo(() => {
-    if (!company) return "";
-    return buildReportText({
-      companyName: company.name,
-      fullStrength: company.full_strength,
-      reportDate: parseISODate(date),
-      reporterName,
-      reporterPosition: reporterPosition ? `เลขที่ในหมวด ${reporterPosition}` : "-",
-      reportTime,
-      entries,
-    });
-  }, [company, date, reporterName, reporterPosition, reportTime, entries]);
-
-  const copy = async () => {
-    await navigator.clipboard.writeText(reportText);
-    toast.success("คัดลอกคำรายงานแล้ว");
-  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -195,36 +177,24 @@ function CompanyPage() {
           </CardContent>
         </Card>
 
-        {CATEGORY_ORDER.map((cat) => {
-          const list = entries.map((e, i) => ({ e, i })).filter((x) => x.e.category === cat);
+        {CATEGORY_ORDER.map((category) => {
+          const list = entries.map((entry, i) => ({ entry, i })).filter((item) => item.entry.category === category);
           return (
-            <Card key={cat}>
+            <Card key={category}>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <CardTitle className="text-base">📍 {CATEGORY_LABELS[cat]}</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => addEntry(cat)}>
+                <CardTitle className="text-base">📍 {CATEGORY_LABELS[category]}</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => addEntry(category)}>
                   <Plus className="h-4 w-4 mr-1" /> เพิ่ม
                 </Button>
               </CardHeader>
               <CardContent className="space-y-3">
-                {list.length === 0 && (
-                  <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>
-                )}
-                {list.map(({ e, i }) => (
-                  <div key={e.id ?? e._local} className="border rounded-md p-3 space-y-2 bg-slate-50">
-                    {cat === "other" ? (
+                {list.length === 0 && <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>}
+                {list.map(({ entry, i }) => (
+                  <div key={entry.id ?? entry._local} className="border rounded-md p-3 space-y-2 bg-slate-50">
+                    {category === "other" ? (
                       <div className="grid grid-cols-[1fr_100px_auto] gap-2">
-                        <Input
-                          placeholder="หัวข้อ เช่น โปโล"
-                          value={e.subcategory}
-                          onChange={(ev) => updateEntry(i, { subcategory: ev.target.value })}
-                        />
-                        <Input
-                          type="number"
-                          min={0}
-                          value={e.count}
-                          onChange={(ev) => updateEntry(i, { count: Number(ev.target.value) })}
-                          placeholder="จำนวน"
-                        />
+                        <Input placeholder="หัวข้อ เช่น โปโล" value={entry.subcategory} onChange={(event) => updateEntry(i, { subcategory: event.target.value })} />
+                        <Input type="number" min={0} value={entry.count} onChange={(event) => updateEntry(i, { count: Number(event.target.value) })} placeholder="จำนวน" />
                         <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -232,26 +202,14 @@ function CompanyPage() {
                     ) : (
                       <>
                         <div className="flex gap-2">
-                          <Input
-                            placeholder="ชื่อ เช่น ชยานันท์ พ."
-                            value={e.cadet_name}
-                            onChange={(ev) => updateEntry(i, { cadet_name: ev.target.value })}
-                          />
+                          <Input placeholder="ชื่อ เช่น ชยานันท์ พ." value={entry.cadet_name} onChange={(event) => updateEntry(i, { cadet_name: event.target.value })} />
                           <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
                         <div className="grid sm:grid-cols-2 gap-2">
-                          <Input
-                            placeholder="สาเหตุ"
-                            value={e.reason}
-                            onChange={(ev) => updateEntry(i, { reason: ev.target.value })}
-                          />
-                          <Input
-                            placeholder="สถานที่"
-                            value={e.location}
-                            onChange={(ev) => updateEntry(i, { location: ev.target.value })}
-                          />
+                          <Input placeholder="สาเหตุ" value={entry.reason} onChange={(event) => updateEntry(i, { reason: event.target.value })} />
+                          <Input placeholder="สถานที่" value={entry.location} onChange={(event) => updateEntry(i, { location: event.target.value })} />
                         </div>
                       </>
                     )}
@@ -265,9 +223,6 @@ function CompanyPage() {
         <div className="flex flex-wrap gap-2 sticky bottom-4 bg-white p-3 border rounded-lg shadow-lg">
           <Button onClick={() => save.mutate()} disabled={save.isPending} className="flex-1">
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
-          </Button>
-          <Button variant="outline" onClick={copy}>
-            <Copy className="h-4 w-4 mr-1" /> คัดลอก
           </Button>
         </div>
       </main>

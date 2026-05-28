@@ -17,44 +17,51 @@ export const Route = createFileRoute("/_admin/admin/report")({
 
 function ReportPage() {
   const [date, setDate] = useState(todayISO());
+  const [selectedReporter, setSelectedReporter] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
+  const [reportTime, setReportTime] = useState("05.45");
 
   const { data } = useQuery({
     queryKey: ["report-export", date],
     queryFn: async () => {
-      const { data: companies } = await supabase.from("companies").select("*").order("display_order");
-      const { data: reports } = await supabase
-        .from("daily_reports")
-        .select("*, dispatch_entries(*)")
-        .eq("report_date", date);
-      return { companies: companies || [], reports: reports || [] };
+      const [companiesResult, reportsResult] = await Promise.all([
+        supabase.from("companies").select("id,full_strength,display_order").order("display_order"),
+        supabase
+          .from("daily_reports")
+          .select("id,dispatch_entries(category,cadet_name,reason,location,subcategory,count)")
+          .eq("report_date", date),
+      ]);
+      if (companiesResult.error) throw companiesResult.error;
+      if (reportsResult.error) throw reportsResult.error;
+      return { companies: companiesResult.data || [], reports: reportsResult.data || [] };
+    },
+  });
+
+  const { data: reporters } = useQuery({
+    queryKey: ["reporters"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("reporters").select("id,name,display_order").order("display_order");
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const fullText = useMemo(() => {
     if (!data) return "";
-    
-    let fullStrength = 0;
+
     const entries: Entry[] = [];
-    
-    data.companies.forEach((c) => {
-      fullStrength += c.full_strength || 0;
-    });
+    const fullStrength = data.companies.reduce((sum, company) => sum + (company.full_strength || 0), 0);
 
-    let reportTime = "05.45";
-
-    data.reports.forEach((r) => {
-      if (r.report_time && reportTime === "05.45") reportTime = r.report_time;
-
-      (r.dispatch_entries || []).forEach((e: any) => {
+    data.reports.forEach((report) => {
+      (report.dispatch_entries || []).forEach((entry: any) => {
         entries.push({
-          category: e.category,
-          cadet_name: e.cadet_name,
-          reason: e.reason,
-          location: e.location,
-          subcategory: e.subcategory,
-          count: e.count,
+          category: entry.category,
+          cadet_name: entry.cadet_name,
+          reason: entry.reason,
+          location: entry.location,
+          subcategory: entry.subcategory,
+          count: entry.count,
         });
       });
     });
@@ -68,7 +75,7 @@ function ReportPage() {
       reportTime,
       entries,
     });
-  }, [data, date, reporterName, reporterPosition]);
+  }, [data, date, reporterName, reporterPosition, reportTime]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(fullText);
@@ -97,32 +104,53 @@ function ReportPage() {
               <Label>วันที่</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full" />
             </div>
-            <div className="sm:col-span-2 flex gap-3">
+            <div>
+              <Label>เวลารายงาน</Label>
+              <Input value={reportTime} onChange={(e) => setReportTime(e.target.value)} placeholder="05.45" />
+            </div>
+            <div className="flex gap-3">
               <Button onClick={copy} variant="outline" className="flex-1">
-                <Copy className="h-4 w-4 mr-1" /> คัดลอกทั้งหมด
+                <Copy className="h-4 w-4 mr-1" /> คัดลอก
               </Button>
               <Button onClick={download} className="flex-1">
-                <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด .txt
+                <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด
               </Button>
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
+              <Label>เลือกผู้รายงาน</Label>
+              <select
+                value={selectedReporter}
+                onChange={(event) => {
+                  setSelectedReporter(event.target.value);
+                  setReporterName(event.target.value);
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">เลือกรายชื่อ</option>
+                {(reporters || []).map((reporter) => (
+                  <option key={reporter.id} value={reporter.name}>
+                    {reporter.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <Label>ชื่อผู้รายงาน</Label>
               <Input
                 value={reporterName}
-                onChange={(e) => setReporterName(e.target.value)}
+                onChange={(e) => {
+                  setReporterName(e.target.value);
+                  setSelectedReporter("");
+                }}
                 placeholder="นรต.ชนสิษฎ์ ทองย่อน"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <Label>ตำแหน่ง</Label>
-              <Input
-                value={reporterPosition}
-                onChange={(e) => setReporterPosition(e.target.value)}
-                placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค."
-              />
+              <Input value={reporterPosition} onChange={(e) => setReporterPosition(e.target.value)} placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค." />
             </div>
           </div>
 
