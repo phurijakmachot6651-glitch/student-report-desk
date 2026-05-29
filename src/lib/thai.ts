@@ -68,6 +68,23 @@ export type ReportInput = {
   entries: Entry[];
 };
 
+export type CategoryCounts = Record<DispatchCategory, number>;
+
+export type DispatchSummaryItem = {
+  category: DispatchCategory;
+  label: string;
+  count: number;
+  names: string[];
+};
+
+export type StrengthSummary = {
+  fullStrength: number;
+  dispatched: number;
+  remaining: number;
+  categoryCounts: CategoryCounts;
+  items: DispatchSummaryItem[];
+};
+
 export function normalizeOtherSubcategory(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -88,6 +105,59 @@ export function cleanReportEntries(entries: Entry[]): Entry[] {
       }
       return [entry.cadet_name, entry.reason, entry.location].some(Boolean);
     });
+}
+
+export function emptyCategoryCounts(): CategoryCounts {
+  return Object.fromEntries(CATEGORY_ORDER.map((category) => [category, 0])) as CategoryCounts;
+}
+
+export function countDispatchEntry(entry: Pick<Entry, "category" | "count">): number {
+  return entry.category === "other" ? Number(entry.count) || 0 : 1;
+}
+
+export function summarizeDispatchEntries(entries: Entry[], fullStrength: number): StrengthSummary {
+  const cleanedEntries = cleanReportEntries(entries);
+  const categoryCounts = emptyCategoryCounts();
+  const itemsByKey = new Map<string, DispatchSummaryItem>();
+
+  cleanedEntries.forEach((entry) => {
+    const count = countDispatchEntry(entry);
+    const label =
+      entry.category === "other"
+        ? normalizeOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other
+        : CATEGORY_LABELS[entry.category];
+    const key = entry.category === "other" ? `${entry.category}:${label}` : entry.category;
+    const item = itemsByKey.get(key) || {
+      category: entry.category,
+      label,
+      count: 0,
+      names: [],
+    };
+
+    categoryCounts[entry.category] += count;
+    item.count += count;
+
+    if (entry.category !== "other" && entry.cadet_name) {
+      item.names.push(entry.cadet_name);
+    }
+
+    itemsByKey.set(key, item);
+  });
+
+  const normalizedFullStrength = Number(fullStrength) || 0;
+  const dispatched = CATEGORY_ORDER.reduce((sum, category) => sum + categoryCounts[category], 0);
+  const items = Array.from(itemsByKey.values()).sort((a, b) => {
+    const categoryOrder = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
+    return categoryOrder || a.label.localeCompare(b.label, "th");
+  });
+
+  return {
+    fullStrength: normalizedFullStrength,
+    dispatched,
+    remaining: Math.max(0, normalizedFullStrength - dispatched),
+    categoryCounts,
+    items,
+  };
 }
 
 function countFor(cat: DispatchCategory, entries: Entry[]): number {

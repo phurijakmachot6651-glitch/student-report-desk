@@ -27,7 +27,21 @@ export type ReportRowData = {
 };
 
 export function normalizeReportTime(value: string | null | undefined): string {
-  return value?.trim() || DEFAULT_REPORT_TIME;
+  const rawValue = value?.trim();
+  if (!rawValue) return DEFAULT_REPORT_TIME;
+
+  const compactValue = rawValue.replace(/\s+/g, "");
+  const separatedTime = compactValue.match(/^(\d{1,2})[:.](\d{1,2})$/);
+  const compactTime = compactValue.match(/^(\d{1,2})(\d{2})$/);
+  const match = separatedTime || compactTime;
+
+  if (!match) return rawValue;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return rawValue;
+
+  return `${String(hours).padStart(2, "0")}.${String(minutes).padStart(2, "0")}`;
 }
 
 export function isReportRowMetaEntry(entry: Pick<Entry, "category" | "subcategory">): boolean {

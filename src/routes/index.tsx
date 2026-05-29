@@ -3,7 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Shield, Users } from "lucide-react";
+import { Users } from "lucide-react";
+import { summarizeDispatchEntries, todayISO, type Entry } from "@/lib/thai";
+import {
+  DEFAULT_REPORT_TIME,
+  getReportRowFromReports,
+  type StoredDailyReport,
+} from "@/lib/report-rows";
+import { fetchActiveReportTime } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -16,16 +23,43 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { data: companies, isLoading } = useQuery({
-    queryKey: ["companies"],
+  const reportDate = todayISO();
+  const { data, isLoading } = useQuery({
+    queryKey: ["home-summary", reportDate],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("companies")
-        .select("id,name,full_strength,display_order")
-        .order("display_order");
-      if (error) throw error;
-      return data;
+      const [activeReportTime, companiesResult, reportsResult] = await Promise.all([
+        fetchActiveReportTime(supabase),
+        supabase
+          .from("companies")
+          .select("id,name,full_strength,display_order")
+          .order("display_order"),
+        supabase
+          .from("daily_reports")
+          .select(
+            "id,company_id,reporter_name,reporter_position,report_time,dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
+          )
+          .eq("report_date", reportDate),
+      ]);
+
+      if (companiesResult.error) throw companiesResult.error;
+      if (reportsResult.error) throw reportsResult.error;
+      return {
+        activeReportTime,
+        companies: companiesResult.data || [],
+        reports: reportsResult.data || [],
+      };
     },
+  });
+
+  const reportTime = data?.activeReportTime || DEFAULT_REPORT_TIME;
+  const reports = (data?.reports || []) as (StoredDailyReport & { company_id: string })[];
+  const rows = (data?.companies || []).map((company) => {
+    const companyReports = reports.filter((report) => report.company_id === company.id);
+    const match = getReportRowFromReports(companyReports, reportTime);
+    const entries = (match?.row?.entries || []) as Entry[];
+    const summary = summarizeDispatchEntries(entries, company.full_strength);
+
+    return { company, summary };
   });
 
   return (
@@ -58,8 +92,13 @@ function Home() {
           <p className="text-center text-muted-foreground">กำลังโหลด...</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {companies?.map((company) => (
-              <Link key={company.id} to="/company/$id" params={{ id: company.id }}>
+            {rows.map(({ company, summary }) => (
+              <Link
+                key={company.id}
+                to="/company/$id"
+                params={{ id: company.id }}
+                search={{ date: reportDate, time: reportTime }}
+              >
                 <Card className="hover:shadow-lg transition-shadow cursor-pointer hover:border-primary">
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2">
@@ -67,10 +106,46 @@ function Home() {
                       {company.name}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      ยอดเต็ม {company.full_strength} นาย
-                    </p>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-md bg-muted/60 p-2">
+                        <div className="text-muted-foreground">ยอดเต็ม</div>
+                        <div className="font-semibold text-foreground">{summary.fullStrength}</div>
+                      </div>
+                      <div className="rounded-md bg-orange-50 p-2 text-orange-700">
+                        <div>จำหน่าย</div>
+                        <div className="font-semibold">{summary.dispatched}</div>
+                      </div>
+                      <div className="rounded-md bg-green-50 p-2 text-green-700">
+                        <div>คงยอด</div>
+                        <div className="font-semibold">{summary.remaining}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <div className="font-medium text-muted-foreground">จำหน่ายอะไรบ้าง</div>
+                      {summary.items.length > 0 ? (
+                        summary.items.map((item) => (
+                          <div
+                            key={`${item.category}-${item.label}`}
+                            className="flex items-start justify-between gap-2"
+                          >
+                            <span className="min-w-0">
+                              <span>{item.label}</span>
+                              {item.names.length > 0 && (
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  ({item.names.join(", ")})
+                                </span>
+                              )}
+                            </span>
+                            <span className="shrink-0 font-medium">{item.count} นาย</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-muted-foreground">ไม่มีรายการจำหน่าย</div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               </Link>

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import {
   CATEGORY_ORDER,
   cleanReportEntries,
   normalizeOtherSubcategory,
+  summarizeDispatchEntries,
   todayISO,
   type DispatchCategory,
   type Entry,
@@ -25,7 +26,10 @@ import {
   getReportRowFromReports,
   normalizeReportTime,
   type ReportRowData,
+  type StoredDailyReport,
+  type StoredDispatchEntry,
 } from "@/lib/report-rows";
+import { fetchActiveReportTime } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/company/$id")({
   validateSearch: (search): { date?: string; time?: string } => ({
@@ -41,6 +45,11 @@ type OtherOption = {
   count: number;
   companyNames: string[];
 };
+type RelatedCompany = { name?: string | null } | { name?: string | null }[] | null;
+type ReportWithCompany = StoredDailyReport & {
+  company_id: string;
+  companies?: RelatedCompany;
+};
 
 function CompanyPage() {
   const { id } = useParams({ from: "/company/$id" });
@@ -49,9 +58,18 @@ function CompanyPage() {
   const [date, setDate] = useState(() => search.date || todayISO());
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("");
-  const [reportTime, setReportTime] = useState(() => search.time || DEFAULT_REPORT_TIME);
+  const [reportTime, setReportTime] = useState(DEFAULT_REPORT_TIME);
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const selectedReportTime = normalizeReportTime(reportTime);
+
+  const { data: activeReportTime = DEFAULT_REPORT_TIME } = useQuery({
+    queryKey: ["active-report-time"],
+    queryFn: () => fetchActiveReportTime(supabase),
+  });
+
+  useEffect(() => {
+    setReportTime(activeReportTime);
+  }, [activeReportTime]);
 
   const { data: company } = useQuery({
     queryKey: ["company", id],
@@ -65,6 +83,7 @@ function CompanyPage() {
       return data;
     },
   });
+  const strengthSummary = summarizeDispatchEntries(entries, company?.full_strength || 0);
 
   const { data: reports = [] } = useQuery({
     queryKey: ["report", id, date],
@@ -80,8 +99,12 @@ function CompanyPage() {
       return data || [];
     },
   });
-  const currentReportMatch = getReportRowFromReports(reports as any[], selectedReportTime);
-  const report = currentReportMatch?.report || reports[0] || null;
+  const companyReports = reports as StoredDailyReport[];
+  const currentReportMatch = useMemo(
+    () => getReportRowFromReports(companyReports, selectedReportTime),
+    [companyReports, selectedReportTime],
+  );
+  const report = currentReportMatch?.report || companyReports[0] || null;
 
   const { data: otherOptions = [] } = useQuery({
     queryKey: ["other-options", id, date, selectedReportTime],
@@ -97,12 +120,15 @@ function CompanyPage() {
 
       const grouped = new Map<string, OtherOption>();
 
-      (data || []).forEach((dailyReport: any) => {
-        const companyName = dailyReport.companies?.name || "";
+      ((data || []) as ReportWithCompany[]).forEach((dailyReport) => {
+        const relatedCompany = Array.isArray(dailyReport.companies)
+          ? dailyReport.companies[0]
+          : dailyReport.companies;
+        const companyName = relatedCompany?.name || "";
         const row = getReportRow(dailyReport, selectedReportTime);
         if (!row) return;
 
-        row.entries.forEach((entry: any) => {
+        row.entries.forEach((entry) => {
           if (entry.category !== "other") return;
 
           const name = normalizeOtherSubcategory(entry.subcategory || "");
@@ -131,7 +157,7 @@ function CompanyPage() {
       setReporterName(row.reporterName || "");
       setReporterPosition(row.reporterPosition || "");
       setEntries(
-        row.entries.map((entry: any) => ({
+        row.entries.map((entry: StoredDispatchEntry) => ({
           id: entry.id,
           category: entry.category,
           cadet_name: entry.cadet_name,
@@ -146,7 +172,7 @@ function CompanyPage() {
       setReporterPosition("");
       setEntries([]);
     }
-  }, [date, currentReportMatch?.report.id, selectedReportTime]);
+  }, [date, currentReportMatch, selectedReportTime]);
 
   const addEntry = (category: DispatchCategory) => {
     setEntries((prev) => [
@@ -189,7 +215,9 @@ function CompanyPage() {
           (existingRow) => normalizeReportTime(existingRow.reportTime) !== selectedReportTime,
         ),
         row,
-      ].sort((a, b) => normalizeReportTime(a.reportTime).localeCompare(normalizeReportTime(b.reportTime)));
+      ].sort((a, b) =>
+        normalizeReportTime(a.reportTime).localeCompare(normalizeReportTime(b.reportTime)),
+      );
       const reportPayload = {
         company_id: id,
         report_date: date,
@@ -234,11 +262,11 @@ function CompanyPage() {
       }
     },
     onSuccess: () => {
-      toast.success("บันทึกเรียบร้อย");
+      toast.success(`บันทึกเรียบร้อย ยอดสุทธิหลังบันทึก ${strengthSummary.remaining} นาย`);
       qc.invalidateQueries({ queryKey: ["report", id, date] });
       qc.invalidateQueries({ queryKey: ["other-options"] });
     },
-    onError: (error: any) => toast.error(error.message || "บันทึกไม่สำเร็จ"),
+    onError: (error: Error) => toast.error(error.message || "บันทึกไม่สำเร็จ"),
   });
 
   return (
@@ -289,6 +317,55 @@ function CompanyPage() {
                 onChange={(e) => setReporterPosition(e.target.value)}
                 placeholder="๐"
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">ยอดสุทธิหลังบันทึก</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-center text-sm">
+              <div className="rounded-md bg-muted/60 p-3">
+                <div className="text-xs text-muted-foreground">ยอดเต็ม</div>
+                <div className="text-xl font-bold">{strengthSummary.fullStrength}</div>
+                <div className="text-xs text-muted-foreground">นาย</div>
+              </div>
+              <div className="rounded-md bg-orange-50 p-3 text-orange-700">
+                <div className="text-xs">จำหน่าย</div>
+                <div className="text-xl font-bold">{strengthSummary.dispatched}</div>
+                <div className="text-xs">นาย</div>
+              </div>
+              <div className="rounded-md bg-green-50 p-3 text-green-700">
+                <div className="text-xs">คงยอด</div>
+                <div className="text-xl font-bold">{strengthSummary.remaining}</div>
+                <div className="text-xs">นาย</div>
+              </div>
+            </div>
+
+            <div className="space-y-1 text-sm">
+              <div className="font-medium text-muted-foreground">รายการจำหน่าย</div>
+              {strengthSummary.items.length > 0 ? (
+                strengthSummary.items.map((item) => (
+                  <div
+                    key={`${item.category}-${item.label}`}
+                    className="flex items-start justify-between gap-3 rounded-md bg-muted/30 px-3 py-2"
+                  >
+                    <span className="min-w-0">
+                      <span>{item.label}</span>
+                      {item.names.length > 0 && (
+                        <span className="text-muted-foreground"> ({item.names.join(", ")})</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-medium">{item.count} นาย</span>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-md bg-muted/30 px-3 py-2 text-muted-foreground">
+                  ไม่มีรายการจำหน่าย
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
