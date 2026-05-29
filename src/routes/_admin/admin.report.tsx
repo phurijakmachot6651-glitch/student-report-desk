@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { buildReportText, parseISODate, todayISO, type Entry } from "@/lib/thai";
+import { DEFAULT_REPORT_TIME, getReportRow, normalizeReportTime } from "@/lib/report-rows";
 
 export const Route = createFileRoute("/_admin/admin/report")({
   component: ReportPage,
@@ -20,16 +21,19 @@ function ReportPage() {
   const [selectedReporter, setSelectedReporter] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
-  const [reportTime, setReportTime] = useState("05.45");
+  const [reportTime, setReportTime] = useState(DEFAULT_REPORT_TIME);
+  const selectedReportTime = normalizeReportTime(reportTime);
 
   const { data } = useQuery({
-    queryKey: ["report-export", date],
+    queryKey: ["report-export", date, selectedReportTime],
     queryFn: async () => {
       const [companiesResult, reportsResult] = await Promise.all([
         supabase.from("companies").select("id,full_strength,display_order").order("display_order"),
         supabase
           .from("daily_reports")
-          .select("id,dispatch_entries(category,cadet_name,reason,location,subcategory,count)")
+          .select(
+            "id,report_time,reporter_name,reporter_position,dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
+          )
           .eq("report_date", date),
       ]);
       if (companiesResult.error) throw companiesResult.error;
@@ -60,7 +64,10 @@ function ReportPage() {
     );
 
     data.reports.forEach((report) => {
-      (report.dispatch_entries || []).forEach((entry: any) => {
+      const row = getReportRow(report, selectedReportTime);
+      if (!row) return;
+
+      row.entries.forEach((entry: any) => {
         entries.push({
           category: entry.category,
           cadet_name: entry.cadet_name,
@@ -79,10 +86,10 @@ function ReportPage() {
       reportDate: parseISODate(date),
       reporterName: reporterName || "-",
       reporterPosition: reporterPosition || "-",
-      reportTime,
+      reportTime: selectedReportTime,
       entries,
     });
-  }, [data, date, reporterName, reporterPosition, reportTime]);
+  }, [data, date, reporterName, reporterPosition, selectedReportTime]);
 
   const copy = async () => {
     await navigator.clipboard.writeText(fullText);

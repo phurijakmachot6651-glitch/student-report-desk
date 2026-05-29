@@ -17,8 +17,21 @@ import {
   type DispatchCategory,
   type Entry,
 } from "@/lib/thai";
+import {
+  DEFAULT_REPORT_TIME,
+  decodeReportRows,
+  encodeReportRows,
+  getReportRow,
+  getReportRowFromReports,
+  normalizeReportTime,
+  type ReportRowData,
+} from "@/lib/report-rows";
 
 export const Route = createFileRoute("/company/$id")({
+  validateSearch: (search): { date?: string; time?: string } => ({
+    date: typeof search.date === "string" ? search.date : undefined,
+    time: typeof search.time === "string" ? search.time : undefined,
+  }),
   component: CompanyPage,
 });
 
@@ -31,12 +44,14 @@ type OtherOption = {
 
 function CompanyPage() {
   const { id } = useParams({ from: "/company/$id" });
+  const search = Route.useSearch();
   const qc = useQueryClient();
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(() => search.date || todayISO());
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("");
-  const [reportTime, setReportTime] = useState("05.45");
+  const [reportTime, setReportTime] = useState(() => search.time || DEFAULT_REPORT_TIME);
   const [entries, setEntries] = useState<EntryRow[]>([]);
+  const selectedReportTime = normalizeReportTime(reportTime);
 
   const { data: company } = useQuery({
     queryKey: ["company", id],
@@ -51,7 +66,7 @@ function CompanyPage() {
     },
   });
 
-  const { data: report } = useQuery({
+  const { data: reports = [] } = useQuery({
     queryKey: ["report", id, date],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -60,19 +75,22 @@ function CompanyPage() {
           "id,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)",
         )
         .eq("company_id", id)
-        .eq("report_date", date)
-        .maybeSingle();
+        .eq("report_date", date);
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
+  const currentReportMatch = getReportRowFromReports(reports as any[], selectedReportTime);
+  const report = currentReportMatch?.report || reports[0] || null;
 
   const { data: otherOptions = [] } = useQuery({
-    queryKey: ["other-options", id, date],
+    queryKey: ["other-options", id, date, selectedReportTime],
     queryFn: async (): Promise<OtherOption[]> => {
       const { data, error } = await supabase
         .from("daily_reports")
-        .select("company_id,companies(name),dispatch_entries(category,subcategory,count)")
+        .select(
+          "id,report_time,reporter_name,reporter_position,company_id,companies(name),dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
+        )
         .eq("report_date", date)
         .neq("company_id", id);
       if (error) throw error;
@@ -81,8 +99,10 @@ function CompanyPage() {
 
       (data || []).forEach((dailyReport: any) => {
         const companyName = dailyReport.companies?.name || "";
+        const row = getReportRow(dailyReport, selectedReportTime);
+        if (!row) return;
 
-        (dailyReport.dispatch_entries || []).forEach((entry: any) => {
+        row.entries.forEach((entry: any) => {
           if (entry.category !== "other") return;
 
           const name = normalizeOtherSubcategory(entry.subcategory || "");
@@ -105,12 +125,13 @@ function CompanyPage() {
   });
 
   useEffect(() => {
-    if (report) {
-      setReporterName(report.reporter_name || "");
-      setReporterPosition(report.reporter_position || "");
-      setReportTime(report.report_time || "05.45");
+    const row = currentReportMatch?.row || null;
+
+    if (row) {
+      setReporterName(row.reporterName || "");
+      setReporterPosition(row.reporterPosition || "");
       setEntries(
-        (report.dispatch_entries || []).map((entry: any) => ({
+        row.entries.map((entry: any) => ({
           id: entry.id,
           category: entry.category,
           cadet_name: entry.cadet_name,
@@ -123,10 +144,9 @@ function CompanyPage() {
     } else {
       setReporterName("");
       setReporterPosition("");
-      setReportTime("05.45");
       setEntries([]);
     }
-  }, [report?.id]);
+  }, [date, currentReportMatch?.report.id, selectedReportTime]);
 
   const addEntry = (category: DispatchCategory) => {
     setEntries((prev) => [
@@ -157,20 +177,37 @@ function CompanyPage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const { data: savedReport, error: reportError } = await supabase
-        .from("daily_reports")
-        .upsert(
-          {
-            company_id: id,
-            report_date: date,
-            reporter_name: reporterName,
-            reporter_position: reporterPosition,
-            report_time: reportTime,
-          },
-          { onConflict: "company_id,report_date" },
-        )
-        .select()
-        .single();
+      const row: ReportRowData = {
+        reportTime: selectedReportTime,
+        reporterName,
+        reporterPosition,
+        entries: cleanReportEntries(entries),
+      };
+      const existingRows = decodeReportRows(report);
+      const nextRows = [
+        ...existingRows.filter(
+          (existingRow) => normalizeReportTime(existingRow.reportTime) !== selectedReportTime,
+        ),
+        row,
+      ].sort((a, b) => normalizeReportTime(a.reportTime).localeCompare(normalizeReportTime(b.reportTime)));
+      const reportPayload = {
+        company_id: id,
+        report_date: date,
+        reporter_name: nextRows[0]?.reporterName || "",
+        reporter_position: nextRows[0]?.reporterPosition || "",
+        report_time: nextRows[0]?.reportTime || selectedReportTime,
+      };
+
+      const reportResult = report
+        ? await supabase
+            .from("daily_reports")
+            .update(reportPayload)
+            .eq("id", report.id)
+            .select()
+            .single()
+        : await supabase.from("daily_reports").insert(reportPayload).select().single();
+
+      const { data: savedReport, error: reportError } = reportResult;
       if (reportError) throw reportError;
 
       const { error: deleteError } = await supabase
@@ -179,10 +216,10 @@ function CompanyPage() {
         .eq("report_id", savedReport.id);
       if (deleteError) throw deleteError;
 
-      const cleanedEntries = cleanReportEntries(entries);
-      if (cleanedEntries.length > 0) {
+      const encodedEntries = encodeReportRows(nextRows);
+      if (encodedEntries.length > 0) {
         const { error: entriesError } = await supabase.from("dispatch_entries").insert(
-          cleanedEntries.map((entry, display_order) => ({
+          encodedEntries.map((entry) => ({
             report_id: savedReport.id,
             category: entry.category,
             cadet_name: entry.cadet_name,
@@ -190,7 +227,7 @@ function CompanyPage() {
             location: entry.location,
             subcategory: entry.subcategory,
             count: entry.count,
-            display_order,
+            display_order: entry.display_order,
           })),
         );
         if (entriesError) throw entriesError;
@@ -280,7 +317,7 @@ function CompanyPage() {
                         <div className="grid grid-cols-[1fr_100px_auto] gap-2">
                           <Input
                             list={`other-options-${i}`}
-                            placeholder="หัวข้อ"
+                            placeholder="ภารกิจ(ไม่ต้องใส่ชื่อ)"
                             value={entry.subcategory}
                             onChange={(event) =>
                               updateEntry(i, { subcategory: event.target.value })
