@@ -394,15 +394,24 @@ function CompanyPage() {
             .map((entry, i) => ({ entry, i }))
             .filter((item) => item.entry.category === category);
           return (
-            <Card key={category}>
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <CardTitle className="text-base">📍 {CATEGORY_LABELS[category]}</CardTitle>
+            <Card key={category} className={list.length === 0 ? "bg-muted/20" : ""}>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                <div>
+                  <CardTitle className="text-base">📍 {CATEGORY_LABELS[category]}</CardTitle>
+                  {list.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{list.length} รายการ</p>
+                  )}
+                </div>
                 <Button size="sm" variant="outline" onClick={() => addEntry(category)}>
                   <Plus className="h-4 w-4 mr-1" /> เพิ่ม
                 </Button>
               </CardHeader>
               <CardContent className="space-y-3">
-                {list.length === 0 && <p className="text-sm text-muted-foreground">ไม่มีรายการ</p>}
+                {list.length === 0 && (
+                  <div className="rounded-md border border-dashed bg-background/60 px-3 py-2 text-sm text-muted-foreground">
+                    ยังไม่มีรายการในหมวดนี้
+                  </div>
+                )}
                 {list.map(({ entry, i }) => (
                   <div
                     key={entry.id ?? entry._local}
@@ -413,7 +422,7 @@ function CompanyPage() {
                         <div className="grid grid-cols-[1fr_150px_auto] gap-2">
                           <Input
                             list={`other-options-${i}`}
-                            placeholder="ภารกิจ(ไม่ต้องใส่ชื่อ)"
+                            placeholder="ชื่อภารกิจ เช่น ช่วยงาน"
                             value={entry.subcategory}
                             onChange={(event) =>
                               updateEntry(i, { subcategory: event.target.value })
@@ -500,7 +509,13 @@ function CompanyPage() {
           );
         })}
 
-        <div className="flex flex-wrap gap-2 sticky bottom-4 bg-white p-3 border rounded-lg shadow-lg">
+        <div className="sticky bottom-4 flex flex-wrap items-center gap-3 rounded-md border bg-background/95 p-3 shadow-sm backdrop-blur">
+          <div className="min-w-0 flex-1 text-sm">
+            <div className="font-medium">คงยอด {strengthSummary.remaining} นาย</div>
+            <div className="text-xs text-muted-foreground">
+              จำหน่าย {strengthSummary.dispatched} นาย
+            </div>
+          </div>
           <Button onClick={handleSave} disabled={save.isPending} className="flex-1">
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
           </Button>

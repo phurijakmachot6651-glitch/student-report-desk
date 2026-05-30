@@ -107,6 +107,30 @@ function CategoryCountList({
   );
 }
 
+function CategoryCountBadges({
+  counts,
+  className = "",
+}: {
+  counts: CategoryCounts;
+  className?: string;
+}) {
+  const activeCounts = CATEGORY_ORDER.filter((category) => counts[category] > 0);
+
+  if (activeCounts.length === 0) {
+    return <span className="text-sm text-muted-foreground">ไม่มีรายการ</span>;
+  }
+
+  return (
+    <div className={`flex flex-wrap gap-1.5 ${className}`}>
+      {activeCounts.map((category) => (
+        <Badge key={category} variant="secondary" className="font-normal">
+          {CATEGORY_LABELS[category]} {counts[category]} นาย
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 function AdminDashboard() {
   const qc = useQueryClient();
   const [date, setDate] = useState(todayISO());
@@ -263,7 +287,7 @@ function AdminDashboard() {
         <Card className="p-4 space-y-3">
           <div className="text-xs text-muted-foreground">จำหน่ายรวม</div>
           <div className="text-2xl font-bold text-orange-600">{totalDispatched}</div>
-          <CategoryCountList counts={totalCategoryCounts} />
+          <CategoryCountBadges counts={totalCategoryCounts} />
         </Card>
         <Card className="p-4">
           <div className="text-xs text-muted-foreground">คงเหลือรวม</div>
@@ -374,7 +398,7 @@ function AdminDashboard() {
               <TableHead>เวลา</TableHead>
               <TableHead className="text-right">ยอดเต็ม</TableHead>
               <TableHead className="text-right">จำหน่าย</TableHead>
-              <TableHead>รายละเอียดจำหน่าย</TableHead>
+              <TableHead>รายละเอียด</TableHead>
               <TableHead className="text-right">คงเหลือ</TableHead>
               <TableHead>สถานะ</TableHead>
               <TableHead />
@@ -420,9 +444,9 @@ function AdminDashboard() {
                   <TableCell>{row.row?.reportTime || "-"}</TableCell>
                   <TableCell className="text-right">{row.company.full_strength}</TableCell>
                   <TableCell className="text-right">{row.dispatched}</TableCell>
-                  <TableCell className="min-w-56">
+                  <TableCell className="min-w-64">
                     {row.row ? (
-                      <CategoryCountList counts={row.categoryCounts} />
+                      <CategoryCountBadges counts={row.categoryCounts} />
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}

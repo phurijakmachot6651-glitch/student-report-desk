@@ -123,7 +123,6 @@ function Home() {
                     </div>
 
                     <div className="space-y-1 text-xs">
-                      <div className="font-medium text-muted-foreground">จำหน่ายอะไรบ้าง</div>
                       {summary.items.length > 0 ? (
                         summary.items.map((item) => (
                           <div
