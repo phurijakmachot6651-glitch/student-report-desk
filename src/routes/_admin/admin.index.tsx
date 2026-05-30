@@ -255,43 +255,50 @@ function AdminDashboard() {
   const warningRows = rows.filter((row) => row.warnings.length > 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6 space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div>
-            <Label>วันที่</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-48"
-            />
-          </div>
-          <div>
-            <Label>เวลาแถว</Label>
-            <Input
-              value={reportTime}
-              onChange={(e) => setReportTime(e.target.value)}
-              placeholder="05.45"
-              className="w-48"
-            />
-          </div>
+    <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:items-end">
+        <div>
+          <Label>วันที่</Label>
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full sm:w-48"
+          />
+        </div>
+        <div>
+          <Label>เวลาแถว</Label>
+          <Input
+            value={reportTime}
+            onChange={(e) => setReportTime(e.target.value)}
+            placeholder="05.45"
+            className="w-full sm:w-48"
+          />
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground">ยอดเต็มรวม</div>
-          <div className="text-2xl font-bold">{totalFull}</div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 md:grid-cols-3">
+        <Card className="p-3 sm:p-4">
+          <div className="text-[11px] sm:text-xs text-muted-foreground">ยอดเต็มรวม</div>
+          <div className="text-xl sm:text-2xl font-bold">{totalFull}</div>
         </Card>
-        <Card className="p-4 space-y-3">
-          <div className="text-xs text-muted-foreground">จำหน่ายรวม</div>
-          <div className="text-2xl font-bold text-orange-600">{totalDispatched}</div>
+        <Card className="p-3 sm:p-4 sm:space-y-3">
+          <div className="text-[11px] sm:text-xs text-muted-foreground">จำหน่ายรวม</div>
+          <div className="text-xl sm:text-2xl font-bold text-orange-600">{totalDispatched}</div>
+          <div className="hidden sm:block">
+            <CategoryCountBadges counts={totalCategoryCounts} />
+          </div>
+        </Card>
+        <Card className="p-3 sm:p-4">
+          <div className="text-[11px] sm:text-xs text-muted-foreground">คงเหลือรวม</div>
+          <div className="text-xl sm:text-2xl font-bold text-green-600">{totalRemaining}</div>
+        </Card>
+      </div>
+
+      <div className="sm:hidden">
+        <Card className="p-3 space-y-2">
+          <div className="text-xs text-muted-foreground">รายละเอียดจำหน่ายรวม</div>
           <CategoryCountBadges counts={totalCategoryCounts} />
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground">คงเหลือรวม</div>
-          <div className="text-2xl font-bold text-green-600">{totalRemaining}</div>
         </Card>
       </div>
 
@@ -389,7 +396,7 @@ function AdminDashboard() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -495,6 +502,99 @@ function AdminDashboard() {
           </TableBody>
         </Table>
       </Card>
+
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            กำลังโหลดข้อมูลรายงาน...
+          </Card>
+        ) : isError ? (
+          <Card className="p-6 text-center text-sm text-destructive">โหลดข้อมูลรายงานไม่สำเร็จ</Card>
+        ) : rows.length === 0 ? (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            ยังไม่มีข้อมูลหมวดในระบบ
+          </Card>
+        ) : (
+          rows.map((row) => (
+            <Card key={row.company.id} className="p-3 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-semibold text-base">{row.company.name}</div>
+                  {row.row?.reporterName ? (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      ผู้ควบคุม: {row.row.reporterName}
+                      {row.row.reporterPosition && ` (เลขที่ ${row.row.reporterPosition})`}
+                      {row.row.reportTime && ` · ${row.row.reportTime}`}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground mt-0.5">ยังไม่มีผู้ควบคุม</div>
+                  )}
+                </div>
+                {row.row ? (
+                  <Badge className="shrink-0">ส่งแล้ว</Badge>
+                ) : (
+                  <Badge variant="secondary" className="shrink-0">
+                    ยังไม่ส่ง
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-md bg-muted/60 p-2">
+                  <div className="text-[11px] text-muted-foreground">ยอดเต็ม</div>
+                  <div className="text-lg font-bold">{row.company.full_strength}</div>
+                </div>
+                <div className="rounded-md bg-orange-50 p-2 text-orange-700">
+                  <div className="text-[11px]">จำหน่าย</div>
+                  <div className="text-lg font-bold">{row.dispatched}</div>
+                </div>
+                <div className="rounded-md bg-green-50 p-2 text-green-700">
+                  <div className="text-[11px]">คงเหลือ</div>
+                  <div className="text-lg font-bold">{row.remaining}</div>
+                </div>
+              </div>
+
+              {row.row && <CategoryCountBadges counts={row.categoryCounts} />}
+
+              {row.warnings.length > 0 && (
+                <div className="rounded-md bg-red-50 p-2 text-xs text-destructive">
+                  ⚠ {row.warnings.join(", ")}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/company/$id"
+                  params={{ id: row.company.id }}
+                  search={{ date, time: selectedReportTime }}
+                  className="flex-1"
+                >
+                  <Button type="button" size="sm" variant="outline" className="w-full">
+                    ดู / แก้ไข
+                  </Button>
+                </Link>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  disabled={!row.row || clearCompanyReport.isPending}
+                  onClick={() =>
+                    setClearCompanyTarget({
+                      companyId: row.company.id,
+                      companyName: row.company.name,
+                      report: row.report as StoredDailyReport | null,
+                    })
+                  }
+                >
+                  <Trash2 className="mr-1 h-4 w-4" />
+                  ล้างข้อมูล
+                </Button>
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
 
       <AlertDialog
         open={Boolean(clearCompanyTarget)}

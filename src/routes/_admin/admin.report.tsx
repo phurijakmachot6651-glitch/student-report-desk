@@ -107,13 +107,13 @@ function ReportPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6 space-y-4">
+    <main className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>ส่งออกคำรายงานรวม</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">ส่งออกคำรายงานรวม</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid sm:grid-cols-3 gap-3 items-end">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
             <div>
               <Label>วันที่</Label>
               <Input
@@ -131,17 +131,20 @@ function ReportPage() {
                 placeholder="05.45"
               />
             </div>
-            <div className="flex gap-3">
+            <div className="col-span-2 sm:col-span-1 flex gap-2">
               <Button onClick={copy} variant="outline" className="flex-1">
-                <Copy className="h-4 w-4 mr-1" /> คัดลอก
+                <Copy className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">คัดลอก</span>
+                <span className="sm:hidden">คัดลอก</span>
               </Button>
               <Button onClick={download} className="flex-1">
-                <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด
+                <Download className="h-4 w-4 sm:mr-1" />
+                <span>ดาวน์โหลด</span>
               </Button>
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>เลือกผู้รายงาน</Label>
               <select
@@ -181,7 +184,11 @@ function ReportPage() {
             </div>
           </div>
 
-          <Textarea readOnly value={fullText} className="font-mono text-sm min-h-[600px]" />
+          <Textarea
+            readOnly
+            value={fullText}
+            className="font-mono text-xs sm:text-sm min-h-[400px] sm:min-h-[600px]"
+          />
         </CardContent>
       </Card>
     </main>

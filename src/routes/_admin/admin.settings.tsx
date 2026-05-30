@@ -162,14 +162,14 @@ function Settings() {
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
+    <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
       <Card>
-        <CardHeader>
-          <CardTitle>ตั้งค่าหมวด</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">ตั้งค่าหมวด</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {companyRows.map((r, i) => (
-            <div key={r.id} className="grid grid-cols-[1fr_140px] gap-2">
+            <div key={r.id} className="grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_140px] gap-2">
               <Input
                 value={r.name}
                 onChange={(e) =>
@@ -177,6 +177,7 @@ function Settings() {
                     p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
                   )
                 }
+                placeholder="ชื่อหมวด"
               />
               <Input
                 type="number"
@@ -192,15 +193,19 @@ function Settings() {
               />
             </div>
           ))}
-          <Button onClick={() => saveCompanies.mutate()} disabled={saveCompanies.isPending}>
+          <Button
+            onClick={() => saveCompanies.mutate()}
+            disabled={saveCompanies.isPending}
+            className="w-full sm:w-auto"
+          >
             {saveCompanies.isPending ? "กำลังบันทึก..." : "บันทึกหมวด"}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>รายชื่อผู้รายงาน</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">รายชื่อผู้รายงาน</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {reporterRows.map((r, i) => (
@@ -223,16 +228,21 @@ function Settings() {
               </Button>
             </div>
           ))}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() =>
                 setReporterRows((p) => [...p, { _local: crypto.randomUUID(), name: "" }])
               }
+              className="w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-1" /> เพิ่มชื่อ
             </Button>
-            <Button onClick={() => saveReporters.mutate()} disabled={saveReporters.isPending}>
+            <Button
+              onClick={() => saveReporters.mutate()}
+              disabled={saveReporters.isPending}
+              className="w-full sm:w-auto"
+            >
               {saveReporters.isPending ? "กำลังบันทึก..." : "บันทึกรายชื่อ"}
             </Button>
           </div>
@@ -240,8 +250,8 @@ function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Secret code สมัครแอดมิน</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">Secret code สมัครแอดมิน</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -257,6 +267,7 @@ function Settings() {
           <Button
             onClick={() => saveSecret.mutate()}
             disabled={saveSecret.isPending || newSecretCode.trim().length < 4}
+            className="w-full sm:w-auto"
           >
             {saveSecret.isPending ? "กำลังบันทึก..." : "ตั้งค่า secret code"}
           </Button>
@@ -264,8 +275,8 @@ function Settings() {
       </Card>
 
       <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="text-destructive">โซนอันตราย</CardTitle>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg text-destructive">โซนอันตราย</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -274,7 +285,11 @@ function Settings() {
           </p>
           <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={resetReports.isPending}>
+              <Button
+                variant="destructive"
+                disabled={resetReports.isPending}
+                className="w-full sm:w-auto"
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 ล้างข้อมูลทั้งหมด
               </Button>

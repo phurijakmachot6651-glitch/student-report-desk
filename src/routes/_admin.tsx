@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Link, useNavigate, redirect } from "@tanstack/
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Shield, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 export const Route = createFileRoute("/_admin")({
   beforeLoad: async () => {
@@ -38,48 +38,55 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/admin" className="flex items-center gap-2 font-bold">
-              <img
-                src="/tiger_logo.png"
-                alt="Tiger Logo"
-                className="h-6 w-6 object-contain rounded-full border border-primary/20"
-              />
-              แอดมิน
-            </Link>
-            <nav className="flex items-center gap-1 text-sm">
-              <Link
-                to="/admin"
-                className="px-3 py-1.5 rounded hover:bg-secondary/40"
-                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
-              >
-                สรุปยอด
-              </Link>
-              <Link
-                to="/admin/report"
-                className="px-3 py-1.5 rounded hover:bg-secondary/40"
-                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
-              >
-                ส่งออกรายงาน
-              </Link>
-              <Link
-                to="/admin/settings"
-                className="px-3 py-1.5 rounded hover:bg-secondary/40"
-                activeProps={{ className: "px-3 py-1.5 rounded bg-secondary/40 font-medium" }}
-              >
-                ตั้งค่า
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground hidden sm:inline">{email}</span>
-            <Button variant="ghost" size="sm" onClick={logout}>
-              <LogOut className="h-4 w-4 mr-1" /> ออก
+      <header className="border-b bg-card sticky top-0 z-30">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
+          <Link to="/admin" className="flex items-center gap-2 font-bold shrink-0">
+            <img
+              src="/tiger_logo.png"
+              alt="Tiger Logo"
+              className="h-7 w-7 object-contain rounded-full border border-primary/20"
+            />
+            <span className="hidden xs:inline">แอดมิน</span>
+          </Link>
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+            <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">
+              {email}
+            </span>
+            <Button variant="ghost" size="sm" onClick={logout} className="shrink-0">
+              <LogOut className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">ออก</span>
             </Button>
           </div>
         </div>
+        <nav className="mx-auto max-w-6xl px-2 sm:px-4 pb-2 flex items-center gap-1 text-sm overflow-x-auto">
+          <Link
+            to="/admin"
+            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
+            activeProps={{
+              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
+            }}
+          >
+            สรุปยอด
+          </Link>
+          <Link
+            to="/admin/report"
+            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
+            activeProps={{
+              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
+            }}
+          >
+            ส่งออกรายงาน
+          </Link>
+          <Link
+            to="/admin/settings"
+            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
+            activeProps={{
+              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
+            }}
+          >
+            ตั้งค่า
+          </Link>
+        </nav>
       </header>
       <Outlet />
     </div>

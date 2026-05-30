@@ -64,17 +64,19 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
-      <header className="border-b bg-card/80 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <header className="border-b bg-card/80 backdrop-blur sticky top-0 z-30">
+        <div className="mx-auto max-w-5xl px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <img
               src="/tiger_logo.png"
               alt="Tiger Logo"
-              className="h-8 w-8 object-contain rounded-full border border-primary/20"
+              className="h-8 w-8 shrink-0 object-contain rounded-full border border-primary/20"
             />
-            <h1 className="font-bold text-lg">ยอดกำลังพล นรต. กองร้อยที่ ๒</h1>
+            <h1 className="font-bold text-sm sm:text-lg leading-tight truncate">
+              ยอดกำลังพล นรต. กองร้อยที่ ๒
+            </h1>
           </div>
-          <Link to="/admin/login">
+          <Link to="/admin/login" className="shrink-0">
             <Button variant="outline" size="sm">
               Login
             </Button>
@@ -82,16 +84,18 @@ function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-10">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl font-bold tracking-tight">เลือกหมวดเพื่อจำหน่ายยอด</h2>
-          <p className="text-muted-foreground mt-2">เลือกหมวดของท่านเพื่อกรอกยอดกำลังพลประจำวัน</p>
+      <main className="mx-auto max-w-5xl px-3 sm:px-4 py-6 sm:py-10">
+        <div className="text-center mb-6 sm:mb-10">
+          <h2 className="text-xl sm:text-3xl font-bold tracking-tight">เลือกหมวดเพื่อจำหน่ายยอด</h2>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1.5 sm:mt-2">
+            เลือกหมวดของท่านเพื่อกรอกยอดกำลังพลประจำวัน
+          </p>
         </div>
 
         {isLoading ? (
           <p className="text-center text-muted-foreground">กำลังโหลด...</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {rows.map(({ company, summary }) => (
               <Link
                 key={company.id}
@@ -99,37 +103,41 @@ function Home() {
                 params={{ id: company.id }}
                 search={{ date: reportDate, time: reportTime }}
               >
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer hover:border-primary">
+                <Card className="hover:shadow-lg active:shadow-md transition-shadow cursor-pointer hover:border-primary h-full">
                   <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-primary" />
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <Users className="h-5 w-5 text-primary shrink-0" />
                       {company.name}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs sm:text-sm">
                       <div className="rounded-md bg-muted/60 p-2">
-                        <div className="text-muted-foreground">ยอดเต็ม</div>
-                        <div className="font-semibold text-foreground">{summary.fullStrength}</div>
+                        <div className="text-[11px] sm:text-xs text-muted-foreground">ยอดเต็ม</div>
+                        <div className="text-base sm:text-lg font-semibold text-foreground">
+                          {summary.fullStrength}
+                        </div>
                       </div>
                       <div className="rounded-md bg-orange-50 p-2 text-orange-700">
-                        <div>จำหน่าย</div>
-                        <div className="font-semibold">{summary.dispatched}</div>
+                        <div className="text-[11px] sm:text-xs">จำหน่าย</div>
+                        <div className="text-base sm:text-lg font-semibold">
+                          {summary.dispatched}
+                        </div>
                       </div>
                       <div className="rounded-md bg-green-50 p-2 text-green-700">
-                        <div>คงยอด</div>
-                        <div className="font-semibold">{summary.remaining}</div>
+                        <div className="text-[11px] sm:text-xs">คงยอด</div>
+                        <div className="text-base sm:text-lg font-semibold">{summary.remaining}</div>
                       </div>
                     </div>
 
-                    <div className="space-y-1 text-xs">
+                    <div className="space-y-1 text-xs sm:text-sm">
                       {summary.items.length > 0 ? (
                         summary.items.map((item) => (
                           <div
                             key={`${item.category}-${item.label}`}
                             className="flex items-start justify-between gap-2"
                           >
-                            <span className="min-w-0">
+                            <span className="min-w-0 break-words">
                               <span>{item.label}</span>
                               {item.names.length > 0 && (
                                 <span className="text-muted-foreground">
