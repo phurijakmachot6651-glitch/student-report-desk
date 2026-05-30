@@ -6,6 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { updateAdminRegisterSecret } from "@/lib/api/admin-auth.functions";
@@ -22,6 +33,7 @@ function Settings() {
   const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
   const [reporterRows, setReporterRows] = useState<ReporterRow[]>([]);
   const [newSecretCode, setNewSecretCode] = useState("");
+  const [isResetOpen, setIsResetOpen] = useState(false);
 
   const { data: companies } = useQuery({
     queryKey: ["companies"],
@@ -133,6 +145,22 @@ function Settings() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const resetReports = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("daily_reports").delete().not("id", "is", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("ล้างข้อมูลที่กรอกทั้งหมดแล้ว");
+      setIsResetOpen(false);
+      qc.invalidateQueries({ queryKey: ["admin-summary"] });
+      qc.invalidateQueries({ queryKey: ["report-export"] });
+      qc.invalidateQueries({ queryKey: ["report"] });
+      qc.invalidateQueries({ queryKey: ["other-options"] });
+    },
+    onError: (error: any) => toast.error(error.message || "ล้างข้อมูลไม่สำเร็จ"),
+  });
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
       <Card>
@@ -232,6 +260,49 @@ function Settings() {
           >
             {saveSecret.isPending ? "กำลังบันทึก..." : "ตั้งค่า secret code"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="text-destructive">โซนอันตราย</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            ใช้สำหรับล้างข้อมูลรายงานที่ทุกหมวดกรอกไว้ทั้งหมด ทุกวัน และทุกเวลา โดยไม่ลบข้อมูลหมวด
+            ยอดเต็ม รายชื่อผู้รายงาน หรือการตั้งค่า
+          </p>
+          <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={resetReports.isPending}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                ล้างข้อมูลทั้งหมด
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>ล้างข้อมูลที่กรอกทั้งหมด?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  คำสั่งนี้จะลบข้อมูลรายงานที่ทุกหมวดกรอกไว้ทุกวันทุกเวลา
+                  และทำให้สถานะกลับเป็นยังไม่ส่ง โดยไม่ลบข้อมูลหมวด ยอดเต็ม รายชื่อผู้รายงาน
+                  หรือการตั้งค่า
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={resetReports.isPending}>ยกเลิก</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={resetReports.isPending}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    resetReports.mutate();
+                  }}
+                >
+                  {resetReports.isPending ? "กำลังล้าง..." : "ล้างทั้งหมด"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </main>

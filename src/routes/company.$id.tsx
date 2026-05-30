@@ -201,12 +201,31 @@ function CompanyPage() {
     updateEntry(idx, { subcategory, count: Math.max(1, entries[idx]?.count || 1) });
   };
 
+  const validateReportRequiredFields = () => {
+    const missingFields = [];
+
+    if (!reporterName.trim()) missingFields.push("ชื่อผู้ควบคุมแถว");
+    if (!reportTime.trim()) missingFields.push("เวลารายงาน");
+
+    if (missingFields.length > 0) {
+      toast.error(`กรุณากรอก${missingFields.join(" และ ")}ก่อนบันทึก`);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSave = () => {
+    if (!validateReportRequiredFields()) return;
+    save.mutate();
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       const row: ReportRowData = {
         reportTime: selectedReportTime,
-        reporterName,
-        reporterPosition,
+        reporterName: reporterName.trim(),
+        reporterPosition: reporterPosition.trim(),
         entries: cleanReportEntries(entries),
       };
       const existingRows = decodeReportRows(report);
@@ -391,7 +410,7 @@ function CompanyPage() {
                   >
                     {category === "other" ? (
                       <>
-                        <div className="grid grid-cols-[1fr_100px_auto] gap-2">
+                        <div className="grid grid-cols-[1fr_150px_auto] gap-2">
                           <Input
                             list={`other-options-${i}`}
                             placeholder="ภารกิจ(ไม่ต้องใส่ชื่อ)"
@@ -405,15 +424,22 @@ function CompanyPage() {
                               <option key={option.name} value={option.name} />
                             ))}
                           </datalist>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={entry.count}
-                            onChange={(event) =>
-                              updateEntry(i, { count: Number(event.target.value) })
-                            }
-                            placeholder="จำนวน"
-                          />
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={entry.count}
+                              onChange={(event) =>
+                                updateEntry(i, { count: Number(event.target.value) })
+                              }
+                              placeholder="จำนวนคน"
+                              aria-label="จำนวนคน หน่วยนาย"
+                              className="pr-12"
+                            />
+                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
+                              นาย
+                            </span>
+                          </div>
                           <Button size="icon" variant="ghost" onClick={() => removeEntry(i)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -475,7 +501,7 @@ function CompanyPage() {
         })}
 
         <div className="flex flex-wrap gap-2 sticky bottom-4 bg-white p-3 border rounded-lg shadow-lg">
-          <Button onClick={() => save.mutate()} disabled={save.isPending} className="flex-1">
+          <Button onClick={handleSave} disabled={save.isPending} className="flex-1">
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </div>
