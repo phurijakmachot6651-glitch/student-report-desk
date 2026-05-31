@@ -74,7 +74,7 @@ export type DispatchSummaryItem = {
   category: DispatchCategory;
   label: string;
   count: number;
-  names: string[];
+  details: string[];
 };
 
 export type StrengthSummary = {
@@ -87,6 +87,14 @@ export type StrengthSummary = {
 
 export function normalizeOtherSubcategory(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function formatDispatchEntryDetail(entry: Entry): string {
+  const parts = [entry.cadet_name, entry.reason, entry.location]
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.join(", ");
 }
 
 export function cleanReportEntries(entries: Entry[]): Entry[] {
@@ -131,14 +139,17 @@ export function summarizeDispatchEntries(entries: Entry[], fullStrength: number)
       category: entry.category,
       label,
       count: 0,
-      names: [],
+      details: [],
     };
 
     categoryCounts[entry.category] += count;
     item.count += count;
 
-    if (entry.category !== "other" && entry.cadet_name) {
-      item.names.push(entry.cadet_name);
+    if (entry.category !== "other") {
+      const detail = formatDispatchEntryDetail(entry);
+      if (detail) {
+        item.details.push(detail);
+      }
     }
 
     itemsByKey.set(key, item);

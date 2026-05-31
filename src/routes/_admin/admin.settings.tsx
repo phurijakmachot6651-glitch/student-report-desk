@@ -20,6 +20,8 @@ import {
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { updateAdminRegisterSecret } from "@/lib/api/admin-auth.functions";
+import { DEFAULT_REPORT_TIME, isValidReportTime, normalizeReportTime } from "@/lib/report-rows";
+import { fetchReportTimes, saveReportTimes } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/_admin/admin/settings")({
   component: Settings,
@@ -27,11 +29,71 @@ export const Route = createFileRoute("/_admin/admin/settings")({
 
 type CompanyRow = { id: string; name: string; full_strength: number };
 type ReporterRow = { id?: string; _local?: string; name: string };
+type ReportTimeRow = { _local: string; time: string };
+
+const REPORT_TIME_STEP_MINUTES = 60;
+const REPORT_TIME_DAY_MINUTES = 24 * 60;
+
+function parseReportTimeMinutes(value: string): number | null {
+  if (!isValidReportTime(value)) return null;
+
+  const [hours, minutes] = normalizeReportTime(value).split(".").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatReportTimeMinutes(minutes: number): string {
+  const normalizedMinutes =
+    ((minutes % REPORT_TIME_DAY_MINUTES) + REPORT_TIME_DAY_MINUTES) % REPORT_TIME_DAY_MINUTES;
+  const hours = Math.floor(normalizedMinutes / 60);
+  const remainingMinutes = normalizedMinutes % 60;
+
+  return `${String(hours).padStart(2, "0")}.${String(remainingMinutes).padStart(2, "0")}`;
+}
+
+function normalizeEditableReportTime(value: string): string {
+  const trimmedValue = value.trim();
+  return trimmedValue ? normalizeReportTime(trimmedValue) : "";
+}
+
+function createReportTimeRow(rows: ReportTimeRow[]): ReportTimeRow {
+  const usedTimes = new Set(
+    rows
+      .map((row) => normalizeEditableReportTime(row.time))
+      .filter((time) => isValidReportTime(time))
+      .map((time) => normalizeReportTime(time)),
+  );
+  const lastValidMinutes =
+    [...rows]
+      .reverse()
+      .map((row) => parseReportTimeMinutes(row.time))
+      .find((minutes): minutes is number => minutes !== null) ??
+    parseReportTimeMinutes(DEFAULT_REPORT_TIME) ??
+    0;
+
+  for (
+    let offset = REPORT_TIME_STEP_MINUTES;
+    offset <= REPORT_TIME_DAY_MINUTES;
+    offset += REPORT_TIME_STEP_MINUTES
+  ) {
+    const candidate = formatReportTimeMinutes(lastValidMinutes + offset);
+
+    if (!usedTimes.has(candidate)) {
+      return { _local: crypto.randomUUID(), time: candidate };
+    }
+  }
+
+  return { _local: crypto.randomUUID(), time: "" };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 function Settings() {
   const qc = useQueryClient();
   const [companyRows, setCompanyRows] = useState<CompanyRow[]>([]);
   const [reporterRows, setReporterRows] = useState<ReporterRow[]>([]);
+  const [reportTimeRows, setReportTimeRows] = useState<ReportTimeRow[]>([]);
   const [newSecretCode, setNewSecretCode] = useState("");
   const [isResetOpen, setIsResetOpen] = useState(false);
 
@@ -59,6 +121,11 @@ function Settings() {
     },
   });
 
+  const { data: reportTimes } = useQuery({
+    queryKey: ["report-times"],
+    queryFn: () => fetchReportTimes(supabase),
+  });
+
   useEffect(() => {
     if (companies)
       setCompanyRows(
@@ -69,6 +136,12 @@ function Settings() {
   useEffect(() => {
     if (reporters) setReporterRows(reporters.map((r) => ({ id: r.id, name: r.name })));
   }, [reporters]);
+
+  useEffect(() => {
+    if (reportTimes) {
+      setReportTimeRows(reportTimes.map((time) => ({ _local: crypto.randomUUID(), time })));
+    }
+  }, [reportTimes]);
 
   const saveCompanies = useMutation({
     mutationFn: async () => {
@@ -86,7 +159,7 @@ function Settings() {
       toast.success("บันทึกหมวดแล้ว");
       qc.invalidateQueries({ queryKey: ["companies"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (error: unknown) => toast.error(getErrorMessage(error, "บันทึกหมวดไม่สำเร็จ")),
   });
 
   const saveReporters = useMutation({
@@ -131,7 +204,42 @@ function Settings() {
       toast.success("บันทึกรายชื่อผู้รายงานแล้ว");
       qc.invalidateQueries({ queryKey: ["reporters"] });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (error: unknown) =>
+      toast.error(getErrorMessage(error, "บันทึกรายชื่อผู้รายงานไม่สำเร็จ")),
+  });
+
+  const saveTimes = useMutation({
+    mutationFn: async () => {
+      const editableTimes = reportTimeRows.map((row) => normalizeEditableReportTime(row.time));
+      const invalidTimes = editableTimes.filter((time) => time && !isValidReportTime(time));
+      const rows = editableTimes
+        .filter((time) => time.trim())
+        .map((time) => normalizeReportTime(time));
+      const duplicateTimes = rows.filter((time, index) => rows.indexOf(time) !== index);
+
+      if (invalidTimes.length > 0) {
+        throw new Error(`รูปแบบเวลาไม่ถูกต้อง: ${invalidTimes.join(", ")}`);
+      }
+
+      if (duplicateTimes.length > 0) {
+        throw new Error(`เวลาแถวซ้ำกัน: ${[...new Set(duplicateTimes)].join(", ")}`);
+      }
+
+      return saveReportTimes(supabase, rows.length > 0 ? rows : [DEFAULT_REPORT_TIME]);
+    },
+    onSuccess: (savedTimes) => {
+      toast.success(`บันทึกเวลาแถวแล้ว (${savedTimes.join(", ")})`);
+      setReportTimeRows(savedTimes.map((time) => ({ _local: crypto.randomUUID(), time })));
+      qc.invalidateQueries({ queryKey: ["report-times"] });
+      qc.invalidateQueries({ queryKey: ["active-report-time"] });
+      qc.invalidateQueries({ queryKey: ["company-report-times"] });
+      qc.invalidateQueries({ queryKey: ["admin-report-times"] });
+      qc.invalidateQueries({ queryKey: ["report-export-times"] });
+      qc.invalidateQueries({ queryKey: ["home-summary"] });
+      qc.invalidateQueries({ queryKey: ["admin-summary"] });
+      qc.invalidateQueries({ queryKey: ["report-export"] });
+    },
+    onError: (error: unknown) => toast.error(getErrorMessage(error, "บันทึกเวลาแถวไม่สำเร็จ")),
   });
 
   const saveSecret = useMutation({
@@ -142,7 +250,8 @@ function Settings() {
       toast.success("ตั้งค่า secret code แล้ว");
       setNewSecretCode("");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (error: unknown) =>
+      toast.error(getErrorMessage(error, "ตั้งค่า secret code ไม่สำเร็จ")),
   });
 
   const resetReports = useMutation({
@@ -158,18 +267,21 @@ function Settings() {
       qc.invalidateQueries({ queryKey: ["report"] });
       qc.invalidateQueries({ queryKey: ["other-options"] });
     },
-    onError: (error: any) => toast.error(error.message || "ล้างข้อมูลไม่สำเร็จ"),
+    onError: (error: unknown) => toast.error(getErrorMessage(error, "ล้างข้อมูลไม่สำเร็จ")),
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">ตั้งค่าหมวด</CardTitle>
+    <main className="mx-auto max-w-3xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
+      <Card className="rounded-lg">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle>ตั้งค่าหมวด</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           {companyRows.map((r, i) => (
-            <div key={r.id} className="grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_140px] gap-2">
+            <div
+              key={r.id}
+              className="grid grid-cols-[minmax(0,1fr)_110px] gap-2 sm:grid-cols-[1fr_140px]"
+            >
               <Input
                 value={r.name}
                 onChange={(e) =>
@@ -177,7 +289,6 @@ function Settings() {
                     p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
                   )
                 }
-                placeholder="ชื่อหมวด"
               />
               <Input
                 type="number"
@@ -193,23 +304,69 @@ function Settings() {
               />
             </div>
           ))}
-          <Button
-            onClick={() => saveCompanies.mutate()}
-            disabled={saveCompanies.isPending}
-            className="w-full sm:w-auto"
-          >
+          <Button onClick={() => saveCompanies.mutate()} disabled={saveCompanies.isPending}>
             {saveCompanies.isPending ? "กำลังบันทึก..." : "บันทึกหมวด"}
           </Button>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">รายชื่อผู้รายงาน</CardTitle>
+      <Card className="rounded-lg">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle>เวลาแถวสำหรับกรอกยอด</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
+          <p className="text-sm text-muted-foreground">
+            แต่ละเวลาจะเป็นแถวให้ผู้ใช้เลือกกรอกยอด เช่น 05.45 หรือ 18.00
+          </p>
+          {reportTimeRows.map((row, i) => (
+            <div key={row._local} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <Input
+                value={row.time}
+                onChange={(e) =>
+                  setReportTimeRows((p) =>
+                    p.map((x, j) => (j === i ? { ...x, time: e.target.value } : x)),
+                  )
+                }
+                onBlur={(e) =>
+                  setReportTimeRows((p) =>
+                    p.map((x, j) =>
+                      j === i ? { ...x, time: normalizeEditableReportTime(e.target.value) } : x,
+                    ),
+                  )
+                }
+                placeholder="05.45"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setReportTimeRows((p) => p.filter((_, j) => j !== i))}
+                disabled={reportTimeRows.length <= 1}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          ))}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setReportTimeRows((p) => [...p, createReportTimeRow(p)])}
+            >
+              <Plus className="h-4 w-4 mr-1" /> เพิ่มเวลา
+            </Button>
+            <Button onClick={() => saveTimes.mutate()} disabled={saveTimes.isPending}>
+              {saveTimes.isPending ? "กำลังบันทึก..." : "บันทึกเวลาแถว"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-lg">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle>รายชื่อผู้รายงาน</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           {reporterRows.map((r, i) => (
-            <div key={r.id ?? r._local} className="grid grid-cols-[1fr_auto] gap-2">
+            <div key={r.id ?? r._local} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <Input
                 value={r.name}
                 onChange={(e) =>
@@ -228,32 +385,27 @@ function Settings() {
               </Button>
             </div>
           ))}
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button
               variant="outline"
               onClick={() =>
                 setReporterRows((p) => [...p, { _local: crypto.randomUUID(), name: "" }])
               }
-              className="w-full sm:w-auto"
             >
               <Plus className="h-4 w-4 mr-1" /> เพิ่มชื่อ
             </Button>
-            <Button
-              onClick={() => saveReporters.mutate()}
-              disabled={saveReporters.isPending}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={() => saveReporters.mutate()} disabled={saveReporters.isPending}>
               {saveReporters.isPending ? "กำลังบันทึก..." : "บันทึกรายชื่อ"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">Secret code สมัครแอดมิน</CardTitle>
+      <Card className="rounded-lg">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle>Secret code สมัครแอดมิน</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           <div>
             <Label>Secret code ใหม่</Label>
             <Input
@@ -267,29 +419,24 @@ function Settings() {
           <Button
             onClick={() => saveSecret.mutate()}
             disabled={saveSecret.isPending || newSecretCode.trim().length < 4}
-            className="w-full sm:w-auto"
           >
             {saveSecret.isPending ? "กำลังบันทึก..." : "ตั้งค่า secret code"}
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="border-destructive/50">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg text-destructive">โซนอันตราย</CardTitle>
+      <Card className="rounded-lg border-destructive/50">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle className="text-destructive">โซนอันตราย</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           <p className="text-sm text-muted-foreground">
             ใช้สำหรับล้างข้อมูลรายงานที่ทุกหมวดกรอกไว้ทั้งหมด ทุกวัน และทุกเวลา โดยไม่ลบข้อมูลหมวด
             ยอดเต็ม รายชื่อผู้รายงาน หรือการตั้งค่า
           </p>
           <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
             <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                disabled={resetReports.isPending}
-                className="w-full sm:w-auto"
-              >
+              <Button variant="destructive" disabled={resetReports.isPending}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 ล้างข้อมูลทั้งหมด
               </Button>

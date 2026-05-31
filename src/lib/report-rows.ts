@@ -44,6 +44,18 @@ export function normalizeReportTime(value: string | null | undefined): string {
   return `${String(hours).padStart(2, "0")}.${String(minutes).padStart(2, "0")}`;
 }
 
+export function isValidReportTime(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false;
+
+  const normalizedTime = normalizeReportTime(value);
+  const match = normalizedTime.match(/^(\d{2})\.(\d{2})$/);
+  if (!match) return false;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
 export function isReportRowMetaEntry(entry: Pick<Entry, "category" | "subcategory">): boolean {
   return entry.category === "other" && entry.subcategory === ROW_META_SUBCATEGORY;
 }

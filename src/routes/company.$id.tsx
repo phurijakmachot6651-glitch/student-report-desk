@@ -24,12 +24,17 @@ import {
   encodeReportRows,
   getReportRow,
   getReportRowFromReports,
+  isValidReportTime,
   normalizeReportTime,
   type ReportRowData,
   type StoredDailyReport,
   type StoredDispatchEntry,
 } from "@/lib/report-rows";
-import { fetchActiveReportTime } from "@/lib/report-settings";
+import {
+  buildReportTimeOptions,
+  fetchActiveReportTime,
+  fetchReportTimes,
+} from "@/lib/report-settings";
 
 export const Route = createFileRoute("/company/$id")({
   validateSearch: (search): { date?: string; time?: string } => ({
@@ -58,18 +63,39 @@ function CompanyPage() {
   const [date, setDate] = useState(() => search.date || todayISO());
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("");
-  const [reportTime, setReportTime] = useState(DEFAULT_REPORT_TIME);
+  const [reportTime, setReportTime] = useState(() =>
+    isValidReportTime(search.time) ? normalizeReportTime(search.time) : DEFAULT_REPORT_TIME,
+  );
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const selectedReportTime = normalizeReportTime(reportTime);
 
-  const { data: activeReportTime = DEFAULT_REPORT_TIME } = useQuery({
-    queryKey: ["active-report-time"],
-    queryFn: () => fetchActiveReportTime(supabase),
+  const { data: reportTimeSettings } = useQuery({
+    queryKey: ["company-report-times"],
+    queryFn: async () => {
+      const [activeReportTime, reportTimes] = await Promise.all([
+        fetchActiveReportTime(supabase),
+        fetchReportTimes(supabase),
+      ]);
+
+      return { activeReportTime, reportTimes };
+    },
   });
+  const configuredReportTimes = useMemo(
+    () =>
+      buildReportTimeOptions(reportTimeSettings?.activeReportTime, reportTimeSettings?.reportTimes),
+    [reportTimeSettings?.activeReportTime, reportTimeSettings?.reportTimes],
+  );
 
   useEffect(() => {
-    setReportTime(activeReportTime);
-  }, [activeReportTime]);
+    const urlTime = isValidReportTime(search.time)
+      ? normalizeReportTime(search.time)
+      : reportTimeSettings?.activeReportTime;
+    const nextTime = urlTime || configuredReportTimes[0] || DEFAULT_REPORT_TIME;
+
+    setReportTime((currentTime) =>
+      normalizeReportTime(currentTime) === nextTime ? currentTime : nextTime,
+    );
+  }, [configuredReportTimes, reportTimeSettings?.activeReportTime, search.time]);
 
   const { data: company } = useQuery({
     queryKey: ["company", id],
@@ -290,41 +316,51 @@ function CompanyPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card sticky top-0 z-30">
-        <div className="mx-auto max-w-3xl px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
           <Link
             to="/"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground shrink-0"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" />
-            <span>กลับ</span>
+            <ArrowLeft className="h-4 w-4" /> กลับ
           </Link>
-          <h1 className="font-bold text-sm sm:text-base truncate text-center min-w-0">
-            {company?.name}
-          </h1>
-          <div className="w-12 shrink-0" />
+          <h1 className="min-w-0 truncate text-base font-bold">{company?.name || "กรอกยอด"}</h1>
+          <div className="w-16 shrink-0" />
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-6 pb-28 space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
+      <main className="mx-auto max-w-3xl space-y-4 px-3 py-4 pb-28 sm:px-4 sm:py-6">
+        <Card className="rounded-lg">
+          <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ข้อมูลทั่วไป</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+          <CardContent className="grid gap-3 p-4 pt-0 sm:grid-cols-2">
             <div>
               <Label>วันที่</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div>
               <Label>เวลารายงาน</Label>
-              <Input
-                value={reportTime}
+              <select
+                value={selectedReportTime}
                 onChange={(e) => setReportTime(e.target.value)}
-                placeholder="05.45"
-              />
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
+              >
+                {configuredReportTimes.map((time) => {
+                  const normalizedTime = normalizeReportTime(time);
+
+                  return (
+                    <option key={normalizedTime} value={normalizedTime}>
+                      {normalizedTime}
+                    </option>
+                  );
+                })}
+                {!configuredReportTimes.includes(selectedReportTime) && (
+                  <option value={selectedReportTime}>{selectedReportTime}</option>
+                )}
+              </select>
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <Label>ชื่อผู้ควบคุมแถว</Label>
               <Input
                 value={reporterName}
@@ -332,7 +368,7 @@ function CompanyPage() {
                 placeholder="นรต.วิจัย กรณี"
               />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <Label>เลขที่ในหมวด</Label>
               <Input
                 value={reporterPosition}
@@ -343,26 +379,26 @@ function CompanyPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="rounded-lg">
+          <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ยอดสุทธิหลังบันทึก</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 text-center">
+          <CardContent className="space-y-3 p-4 pt-0">
+            <div className="grid grid-cols-3 gap-2 text-center text-sm">
               <div className="rounded-md bg-muted/60 p-2.5 sm:p-3">
-                <div className="text-[11px] sm:text-xs text-muted-foreground">ยอดเต็ม</div>
-                <div className="text-lg sm:text-xl font-bold">{strengthSummary.fullStrength}</div>
-                <div className="text-[11px] sm:text-xs text-muted-foreground">นาย</div>
+                <div className="text-xs text-muted-foreground">ยอดเต็ม</div>
+                <div className="text-xl font-bold">{strengthSummary.fullStrength}</div>
+                <div className="text-xs text-muted-foreground">นาย</div>
               </div>
-              <div className="rounded-md bg-orange-50 p-2.5 sm:p-3 text-orange-700">
-                <div className="text-[11px] sm:text-xs">จำหน่าย</div>
-                <div className="text-lg sm:text-xl font-bold">{strengthSummary.dispatched}</div>
-                <div className="text-[11px] sm:text-xs">นาย</div>
+              <div className="rounded-md bg-orange-50 p-2.5 text-orange-700 sm:p-3">
+                <div className="text-xs">จำหน่าย</div>
+                <div className="text-xl font-bold">{strengthSummary.dispatched}</div>
+                <div className="text-xs">นาย</div>
               </div>
-              <div className="rounded-md bg-green-50 p-2.5 sm:p-3 text-green-700">
-                <div className="text-[11px] sm:text-xs">คงยอด</div>
-                <div className="text-lg sm:text-xl font-bold">{strengthSummary.remaining}</div>
-                <div className="text-[11px] sm:text-xs">นาย</div>
+              <div className="rounded-md bg-green-50 p-2.5 text-green-700 sm:p-3">
+                <div className="text-xs">คงยอด</div>
+                <div className="text-xl font-bold">{strengthSummary.remaining}</div>
+                <div className="text-xs">นาย</div>
               </div>
             </div>
 
@@ -372,15 +408,24 @@ function CompanyPage() {
                 strengthSummary.items.map((item) => (
                   <div
                     key={`${item.category}-${item.label}`}
-                    className="flex items-start justify-between gap-3 rounded-md bg-muted/30 px-3 py-2"
+                    className="rounded-md bg-muted/30 px-3 py-2"
                   >
-                    <span className="min-w-0 break-words">
-                      <span>{item.label}</span>
-                      {item.names.length > 0 && (
-                        <span className="text-muted-foreground"> ({item.names.join(", ")})</span>
-                      )}
-                    </span>
-                    <span className="shrink-0 font-medium">{item.count} นาย</span>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 font-medium">{item.label}</span>
+                      <span className="shrink-0 font-medium">{item.count} นาย</span>
+                    </div>
+                    {item.details.length > 0 && (
+                      <div className="mt-1 space-y-1 text-xs leading-5 text-muted-foreground">
+                        {item.details.map((detail, index) => (
+                          <div
+                            key={`${item.category}-${item.label}-${index}`}
+                            className="break-words"
+                          >
+                            {detail}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
@@ -397,21 +442,26 @@ function CompanyPage() {
             .map((entry, i) => ({ entry, i }))
             .filter((item) => item.entry.category === category);
           return (
-            <Card key={category} className={list.length === 0 ? "bg-muted/20" : ""}>
-              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-                <div className="min-w-0">
-                  <CardTitle className="text-base truncate">
-                    📍 {CATEGORY_LABELS[category]}
+            <Card key={category} className={`rounded-lg ${list.length === 0 ? "bg-muted/20" : ""}`}>
+              <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 pb-3">
+                <div>
+                  <CardTitle className="text-base leading-tight">
+                    {CATEGORY_LABELS[category]}
                   </CardTitle>
                   {list.length > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">{list.length} รายการ</p>
                   )}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => addEntry(category)} className="shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => addEntry(category)}
+                  className="h-10 shrink-0"
+                >
                   <Plus className="h-4 w-4 mr-1" /> เพิ่ม
                 </Button>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 p-4 pt-0">
                 {list.length === 0 && (
                   <div className="rounded-md border border-dashed bg-background/60 px-3 py-2 text-sm text-muted-foreground">
                     ยังไม่มีรายการในหมวดนี้
@@ -420,43 +470,47 @@ function CompanyPage() {
                 {list.map(({ entry, i }) => (
                   <div
                     key={entry.id ?? entry._local}
-                    className="border rounded-md p-3 space-y-2 bg-muted/30"
+                    className="space-y-2 rounded-lg border bg-muted/30 p-3"
                   >
                     {category === "other" ? (
                       <>
-                        <div className="flex items-start gap-2">
-                          <div className="grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_140px] gap-2 flex-1 min-w-0">
+                        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_150px_auto]">
+                          <Input
+                            list={`other-options-${i}`}
+                            placeholder="ชื่อภารกิจ เช่น ช่วยงาน"
+                            value={entry.subcategory}
+                            onChange={(event) =>
+                              updateEntry(i, { subcategory: event.target.value })
+                            }
+                          />
+                          <datalist id={`other-options-${i}`}>
+                            {otherOptions.map((option) => (
+                              <option key={option.name} value={option.name} />
+                            ))}
+                          </datalist>
+                          <div className="relative">
                             <Input
-                              list={`other-options-${i}`}
-                              placeholder="ชื่อภารกิจ เช่น ช่วยงาน"
-                              value={entry.subcategory}
+                              type="number"
+                              min={0}
+                              value={entry.count}
                               onChange={(event) =>
-                                updateEntry(i, { subcategory: event.target.value })
+                                updateEntry(i, { count: Number(event.target.value) })
                               }
+                              placeholder="จำนวนคน"
+                              aria-label="จำนวนคน หน่วยนาย"
+                              className="pr-12"
                             />
-                            <datalist id={`other-options-${i}`}>
-                              {otherOptions.map((option) => (
-                                <option key={option.name} value={option.name} />
-                              ))}
-                            </datalist>
-                            <div className="relative">
-                              <Input
-                                type="number"
-                                min={0}
-                                value={entry.count}
-                                onChange={(event) =>
-                                  updateEntry(i, { count: Number(event.target.value) })
-                                }
-                                placeholder="จำนวน"
-                                aria-label="จำนวนคน หน่วยนาย"
-                                className="pr-12"
-                              />
-                              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-                                นาย
-                              </span>
-                            </div>
+                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
+                              นาย
+                            </span>
                           </div>
-                          <Button size="icon" variant="ghost" onClick={() => removeEntry(i)} className="shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeEntry(i)}
+                            className="justify-self-end"
+                            aria-label="ลบรายการ"
+                          >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -474,6 +528,7 @@ function CompanyPage() {
                                   size="sm"
                                   variant={selected ? "default" : "outline"}
                                   onClick={() => selectOtherSubcategory(i, option.name)}
+                                  className="max-w-full overflow-hidden text-ellipsis"
                                   title={`มีใน ${option.companyNames.join(", ") || "หมวดอื่น"} รวม ${option.count} นาย`}
                                 >
                                   {option.name}
@@ -485,17 +540,22 @@ function CompanyPage() {
                       </>
                     ) : (
                       <>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                           <Input
                             placeholder="ชื่อ เช่น วิจัย ก."
                             value={entry.cadet_name}
                             onChange={(event) => updateEntry(i, { cadet_name: event.target.value })}
                           />
-                          <Button size="icon" variant="ghost" onClick={() => removeEntry(i)} className="shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeEntry(i)}
+                            aria-label="ลบรายการ"
+                          >
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="grid gap-2 sm:grid-cols-2">
                           <Input
                             placeholder="สาเหตุ"
                             value={entry.reason}
@@ -515,21 +575,19 @@ function CompanyPage() {
             </Card>
           );
         })}
-      </main>
 
-      <div className="fixed bottom-0 inset-x-0 z-40 border-t bg-background/95 backdrop-blur shadow-lg">
-        <div className="mx-auto max-w-3xl px-3 sm:px-4 py-3 flex items-center gap-3">
+        <div className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1 text-sm">
-            <div className="font-semibold">คงยอด {strengthSummary.remaining} นาย</div>
+            <div className="font-medium">คงยอด {strengthSummary.remaining} นาย</div>
             <div className="text-xs text-muted-foreground">
-              จำหน่าย {strengthSummary.dispatched} / {strengthSummary.fullStrength} นาย
+              จำหน่าย {strengthSummary.dispatched} นาย
             </div>
           </div>
-          <Button onClick={handleSave} disabled={save.isPending} className="shrink-0 min-w-[100px]">
+          <Button onClick={handleSave} disabled={save.isPending} className="w-full sm:flex-1">
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

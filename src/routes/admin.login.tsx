@@ -47,16 +47,16 @@ function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20 flex items-center justify-center p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-background to-secondary/20 px-3 py-6 sm:p-4">
       <div className="w-full max-w-sm">
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-4 hover:text-foreground"
+          className="mb-4 inline-flex h-10 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> หน้าแรก
         </Link>
-        <Card>
-          <CardHeader className="text-center flex flex-col items-center">
+        <Card className="rounded-lg">
+          <CardHeader className="flex flex-col items-center p-4 text-center sm:p-6">
             <div className="mb-2">
               <img
                 src="/tiger_logo.png"
@@ -67,7 +67,7 @@ function AdminLogin() {
             <CardTitle>แอดมิน</CardTitle>
             <CardDescription>ระบบจัดทำยอดกำลังพล นรต.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             <Tabs defaultValue="login">
               <TabsList className="grid grid-cols-2 w-full mb-4">
                 <TabsTrigger value="login">เข้าสู่ระบบ</TabsTrigger>

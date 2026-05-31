@@ -11,6 +11,7 @@ import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { buildReportText, parseISODate, todayISO, type Entry } from "@/lib/thai";
 import { DEFAULT_REPORT_TIME, getReportRow, normalizeReportTime } from "@/lib/report-rows";
+import { fetchActiveReportTime, fetchReportTimes } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/_admin/admin/report")({
   component: ReportPage,
@@ -21,8 +22,31 @@ function ReportPage() {
   const [selectedReporter, setSelectedReporter] = useState("");
   const [reporterName, setReporterName] = useState("");
   const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
-  const [reportTime, setReportTime] = useState(DEFAULT_REPORT_TIME);
-  const selectedReportTime = normalizeReportTime(reportTime);
+  const [selectedReportTimeInput, setSelectedReportTimeInput] = useState<string | null>(null);
+
+  const { data: reportTimeSettings } = useQuery({
+    queryKey: ["report-export-times"],
+    queryFn: async () => {
+      const [activeReportTime, reportTimes] = await Promise.all([
+        fetchActiveReportTime(supabase),
+        fetchReportTimes(supabase),
+      ]);
+
+      return { activeReportTime, reportTimes };
+    },
+  });
+  const reportTimes = Array.from(
+    new Set(
+      [
+        reportTimeSettings?.activeReportTime || DEFAULT_REPORT_TIME,
+        ...(reportTimeSettings?.reportTimes || [DEFAULT_REPORT_TIME]),
+      ].map(normalizeReportTime),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  const selectedReportTime =
+    selectedReportTimeInput && reportTimes.includes(selectedReportTimeInput)
+      ? selectedReportTimeInput
+      : reportTimeSettings?.activeReportTime || reportTimes[0] || DEFAULT_REPORT_TIME;
 
   const { data } = useQuery({
     queryKey: ["report-export", date, selectedReportTime],
@@ -67,7 +91,7 @@ function ReportPage() {
       const row = getReportRow(report, selectedReportTime);
       if (!row) return;
 
-      row.entries.forEach((entry: any) => {
+      row.entries.forEach((entry: Entry) => {
         entries.push({
           category: entry.category,
           cadet_name: entry.cadet_name,
@@ -107,13 +131,13 @@ function ReportPage() {
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">ส่งออกคำรายงานรวม</CardTitle>
+    <main className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
+      <Card className="rounded-lg">
+        <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
+          <CardTitle>ส่งออกคำรายงานรวม</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          <div className="grid sm:grid-cols-3 gap-3 items-end">
             <div>
               <Label>วันที่</Label>
               <Input
@@ -125,26 +149,29 @@ function ReportPage() {
             </div>
             <div>
               <Label>เวลารายงาน</Label>
-              <Input
-                value={reportTime}
-                onChange={(e) => setReportTime(e.target.value)}
-                placeholder="05.45"
-              />
+              <select
+                value={selectedReportTime}
+                onChange={(e) => setSelectedReportTimeInput(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
+              >
+                {reportTimes.map((time) => (
+                  <option key={time} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="col-span-2 sm:col-span-1 flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Button onClick={copy} variant="outline" className="flex-1">
-                <Copy className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">คัดลอก</span>
-                <span className="sm:hidden">คัดลอก</span>
+                <Copy className="h-4 w-4 mr-1" /> คัดลอก
               </Button>
               <Button onClick={download} className="flex-1">
-                <Download className="h-4 w-4 sm:mr-1" />
-                <span>ดาวน์โหลด</span>
+                <Download className="h-4 w-4 mr-1" /> ดาวน์โหลด
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <div>
               <Label>เลือกผู้รายงาน</Label>
               <select
@@ -153,7 +180,7 @@ function ReportPage() {
                   setSelectedReporter(event.target.value);
                   setReporterName(event.target.value);
                 }}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
               >
                 <option value="">เลือกรายชื่อ</option>
                 {(reporters || []).map((reporter) => (
@@ -187,7 +214,7 @@ function ReportPage() {
           <Textarea
             readOnly
             value={fullText}
-            className="font-mono text-xs sm:text-sm min-h-[400px] sm:min-h-[600px]"
+            className="min-h-[420px] font-mono text-sm sm:min-h-[600px]"
           />
         </CardContent>
       </Card>

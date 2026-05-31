@@ -38,55 +38,62 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card sticky top-0 z-30">
-        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
-          <Link to="/admin" className="flex items-center gap-2 font-bold shrink-0">
-            <img
-              src="/tiger_logo.png"
-              alt="Tiger Logo"
-              className="h-7 w-7 object-contain rounded-full border border-primary/20"
-            />
-            <span className="hidden xs:inline">แอดมิน</span>
-          </Link>
-          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-            <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">
-              {email}
-            </span>
-            <Button variant="ghost" size="sm" onClick={logout} className="shrink-0">
-              <LogOut className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">ออก</span>
+      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-3 py-3 sm:px-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:gap-4">
+            <div className="flex items-center justify-between gap-3">
+              <Link to="/admin" className="flex min-w-0 items-center gap-2 font-bold">
+                <img
+                  src="/tiger_logo.png"
+                  alt="Tiger Logo"
+                  className="h-7 w-7 shrink-0 rounded-full border border-primary/20 object-contain"
+                />
+                <span className="truncate">แอดมิน</span>
+              </Link>
+              <Button variant="ghost" size="sm" onClick={logout} className="md:hidden">
+                <LogOut className="h-4 w-4 mr-1" /> ออก
+              </Button>
+            </div>
+            <nav className="-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-1 text-sm sm:mx-0 sm:px-0 md:pb-0">
+              <Link
+                to="/admin"
+                className="flex h-10 shrink-0 items-center rounded-md px-3 hover:bg-secondary/40"
+                activeProps={{
+                  className:
+                    "flex h-10 shrink-0 items-center rounded-md bg-secondary/60 px-3 font-medium",
+                }}
+              >
+                สรุปยอด
+              </Link>
+              <Link
+                to="/admin/report"
+                className="flex h-10 shrink-0 items-center rounded-md px-3 hover:bg-secondary/40"
+                activeProps={{
+                  className:
+                    "flex h-10 shrink-0 items-center rounded-md bg-secondary/60 px-3 font-medium",
+                }}
+              >
+                ส่งออกรายงาน
+              </Link>
+              <Link
+                to="/admin/settings"
+                className="flex h-10 shrink-0 items-center rounded-md px-3 hover:bg-secondary/40"
+                activeProps={{
+                  className:
+                    "flex h-10 shrink-0 items-center rounded-md bg-secondary/60 px-3 font-medium",
+                }}
+              >
+                ตั้งค่า
+              </Link>
+            </nav>
+          </div>
+          <div className="hidden items-center gap-2 md:flex">
+            <span className="hidden text-xs text-muted-foreground sm:inline">{email}</span>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="h-4 w-4 mr-1" /> ออก
             </Button>
           </div>
         </div>
-        <nav className="mx-auto max-w-6xl px-2 sm:px-4 pb-2 flex items-center gap-1 text-sm overflow-x-auto">
-          <Link
-            to="/admin"
-            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
-            activeProps={{
-              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
-            }}
-          >
-            สรุปยอด
-          </Link>
-          <Link
-            to="/admin/report"
-            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
-            activeProps={{
-              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
-            }}
-          >
-            ส่งออกรายงาน
-          </Link>
-          <Link
-            to="/admin/settings"
-            className="px-3 py-1.5 rounded-md hover:bg-secondary/40 whitespace-nowrap"
-            activeProps={{
-              className: "px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-medium whitespace-nowrap",
-            }}
-          >
-            ตั้งค่า
-          </Link>
-        </nav>
       </header>
       <Outlet />
     </div>

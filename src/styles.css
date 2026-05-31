@@ -146,8 +146,21 @@
       sans-serif;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    min-width: 320px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
   }
 }
