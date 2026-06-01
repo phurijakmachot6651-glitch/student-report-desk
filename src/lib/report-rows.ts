@@ -75,7 +75,7 @@ function rowIndexFromMeta(entry: StoredDispatchEntry): number {
   return Math.max(0, count - 1);
 }
 
-function createRow(reportTime: string, reporterName = "", reporterPosition = ""): ReportRowData {
+function createRow(reportTime: string | null | undefined, reporterName = "", reporterPosition = ""): ReportRowData {
   return {
     reportTime: normalizeReportTime(reportTime),
     reporterName,
