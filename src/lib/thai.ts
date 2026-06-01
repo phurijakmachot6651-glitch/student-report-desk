@@ -182,7 +182,7 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
   const list = entries.filter((e) => e.category === cat);
   const total = countFor(cat, entries);
   const label = CATEGORY_LABELS[cat];
-  const head = total > 0 ? `   📍 ${label} ${toThaiNumerals(total)} นาย` : `   📍 ${label} - นาย`;
+  const head = total > 0 ? ` 📍 ${label} ${toThaiNumerals(total)} นาย` : ` 📍 ${label} - นาย`;
 
   if (cat === "other") {
     const grouped = list.reduce(
@@ -194,13 +194,13 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
     );
 
     const lines = Object.entries(grouped).map(
-      ([key, count]) => `   - ${key}                  ${toThaiNumerals(count)} นาย`,
+      ([key, count]) => `- ${key}                  ${toThaiNumerals(count)} นาย`,
     );
     return [head, ...lines].join("\n");
   }
   const lines = list.map((e) => {
     const parts = [e.cadet_name, e.reason, e.location].filter(Boolean);
-    return `   - ${parts.join(", ")}`;
+    return `- ${parts.join(" ,")}`;
   });
   return [head, ...lines].join("\n");
 }
@@ -221,9 +221,9 @@ export function buildReportText(input: ReportInput): string {
     `${input.reporterPosition || "-"}`,
     `ขออนุญาตรายงานยอดกำลังพลของนักเรียนนายร้อยตำรวจชั้นปีที่ ๒ รุ่นที่ ๘๒ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
     "",
-    `📌 ยอดเต็ม                   ${toThaiNumerals(input.fullStrength)} นาย`,
-    `📌 จำหน่ายรวม                ${toThaiNumerals(totalDispatched)} นาย`,
-    `📌 คงเหลือ                   ${toThaiNumerals(remaining)} นาย`,
+    `📌 ยอดเต็ม                   ${toThaiNumerals(input.fullStrength)}  นาย`,
+    `📌 จำหน่ายรวม                  ${toThaiNumerals(totalDispatched)}  นาย`,
+    `📌 คงเหลือ                    ${toThaiNumerals(remaining)}  นาย`,
     "",
   ].join("\n");
 

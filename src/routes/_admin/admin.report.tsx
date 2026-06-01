@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_admin/admin/report")({
 function ReportPage() {
   const [date, setDate] = useState(todayISO());
   const [selectedReporter, setSelectedReporter] = useState("");
-  const [reporterName, setReporterName] = useState("");
+  const [reporterName, setReporterName] = useState("นรต.ธัชชัย อ่อนแก้ว");
   const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
   const [selectedReportTimeInput, setSelectedReportTimeInput] = useState<string | null>(null);
 
@@ -198,7 +198,7 @@ function ReportPage() {
                   setReporterName(e.target.value);
                   setSelectedReporter("");
                 }}
-                placeholder="นรต.ชนสิษฎ์ ทองย่อน"
+                placeholder="นรต.ธัชชัย อ่อนแก้ว"
               />
             </div>
             <div className="sm:col-span-2">
