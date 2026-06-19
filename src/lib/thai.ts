@@ -229,7 +229,7 @@ export function buildReportText(input: ReportInput): string {
 
   const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n");
 
-  return `${header}${body}\n\nจึงเรียนมาเพื่อโปรดทราบ\n`;
+  return `${header}\n${body}\n\nจึงเรียนมาเพื่อโปรดทราบ\n`;
 }
 
 function markdownCategoryBlock(cat: DispatchCategory, entries: Entry[]): string {
