@@ -13,8 +13,9 @@ import {
 } from "@/lib/report-rows";
 import {
   buildReportTimeOptions,
-  fetchActiveReportTime,
-  fetchReportTimes,
+  fetchReportTimeSettings,
+  REPORT_TIME_SETTINGS_QUERY_KEY,
+  REPORT_TIME_SETTINGS_QUERY_OPTIONS,
 } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/")({
@@ -30,12 +31,17 @@ export const Route = createFileRoute("/")({
 function Home() {
   const reportDate = todayISO();
   const [selectedReportTime, setSelectedReportTime] = useState<string | null>(null);
-  const { data, isLoading } = useQuery({
+
+  const { data: reportTimeSettings, isLoading: isLoadingReportTimes } = useQuery({
+    queryKey: REPORT_TIME_SETTINGS_QUERY_KEY,
+    queryFn: () => fetchReportTimeSettings(supabase),
+    ...REPORT_TIME_SETTINGS_QUERY_OPTIONS,
+  });
+
+  const { data, isLoading: isLoadingSummary } = useQuery({
     queryKey: ["home-summary", reportDate],
     queryFn: async () => {
-      const [activeReportTime, reportTimes, companiesResult, reportsResult] = await Promise.all([
-        fetchActiveReportTime(supabase),
-        fetchReportTimes(supabase),
+      const [companiesResult, reportsResult] = await Promise.all([
         supabase
           .from("companies")
           .select("id,name,full_strength,display_order")
@@ -51,16 +57,15 @@ function Home() {
       if (companiesResult.error) throw companiesResult.error;
       if (reportsResult.error) throw reportsResult.error;
       return {
-        activeReportTime,
-        reportTimes,
         companies: companiesResult.data || [],
         reports: reportsResult.data || [],
       };
     },
   });
 
-  const activeReportTime = data?.activeReportTime || DEFAULT_REPORT_TIME;
-  const reportTimes = buildReportTimeOptions(activeReportTime, data?.reportTimes);
+  const isLoading = isLoadingReportTimes || isLoadingSummary;
+  const activeReportTime = reportTimeSettings?.activeReportTime || DEFAULT_REPORT_TIME;
+  const reportTimes = buildReportTimeOptions(activeReportTime, reportTimeSettings?.reportTimes);
   const reportTime =
     selectedReportTime && reportTimes.includes(selectedReportTime)
       ? selectedReportTime
@@ -76,7 +81,8 @@ function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="relative min-h-screen bg-background">
+      <img src="/tiger-bg.jpg" alt="" className="fixed inset-0 h-full w-full object-contain opacity-20 pointer-events-none select-none" />
       <header className="sticky top-0 z-20 border-b bg-card/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-2">
@@ -122,7 +128,7 @@ function Home() {
                     type="button"
                     variant={selected ? "default" : "outline"}
                     onClick={() => setSelectedReportTime(time)}
-                    className="h-10 min-w-24 shrink-0 snap-start"
+                    className="h-10 min-w-24 shrink-0 snap-start backdrop-blur-sm"
                   >
                     เวลา {time}
                   </Button>
@@ -139,7 +145,7 @@ function Home() {
                   search={{ date: reportDate, time: reportTime }}
                   className="block h-full"
                 >
-                  <Card className="h-full cursor-pointer rounded-lg transition hover:border-primary hover:shadow-lg active:scale-[0.99]">
+                  <Card className="h-full cursor-pointer rounded-lg transition hover:border-primary hover:shadow-lg active:scale-[0.99] bg-card/95 backdrop-blur-sm shadow-md">
                     <CardHeader className="p-4 pb-3">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Users className="h-5 w-5 shrink-0 text-primary" />

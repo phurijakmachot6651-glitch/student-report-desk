@@ -32,8 +32,9 @@ import {
 } from "@/lib/report-rows";
 import {
   buildReportTimeOptions,
-  fetchActiveReportTime,
-  fetchReportTimes,
+  fetchReportTimeSettings,
+  REPORT_TIME_SETTINGS_QUERY_KEY,
+  REPORT_TIME_SETTINGS_QUERY_OPTIONS,
 } from "@/lib/report-settings";
 
 export const Route = createFileRoute("/company/$id")({
@@ -70,15 +71,9 @@ function CompanyPage() {
   const selectedReportTime = normalizeReportTime(reportTime);
 
   const { data: reportTimeSettings } = useQuery({
-    queryKey: ["company-report-times"],
-    queryFn: async () => {
-      const [activeReportTime, reportTimes] = await Promise.all([
-        fetchActiveReportTime(supabase),
-        fetchReportTimes(supabase),
-      ]);
-
-      return { activeReportTime, reportTimes };
-    },
+    queryKey: REPORT_TIME_SETTINGS_QUERY_KEY,
+    queryFn: () => fetchReportTimeSettings(supabase),
+    ...REPORT_TIME_SETTINGS_QUERY_OPTIONS,
   });
   const configuredReportTimes = useMemo(
     () =>
@@ -474,7 +469,7 @@ function CompanyPage() {
                   >
                     {category === "other" ? (
                       <>
-                        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_150px_auto]">
+                        <div className="grid grid-cols-[1fr_auto] gap-2 md:grid-cols-[minmax(0,1fr)_150px_auto]">
                           <Input
                             list={`other-options-${i}`}
                             placeholder="ชื่อภารกิจ เช่น ช่วยงาน"
@@ -482,6 +477,7 @@ function CompanyPage() {
                             onChange={(event) =>
                               updateEntry(i, { subcategory: event.target.value })
                             }
+                            className="col-span-2 md:col-span-1"
                           />
                           <datalist id={`other-options-${i}`}>
                             {otherOptions.map((option) => (
