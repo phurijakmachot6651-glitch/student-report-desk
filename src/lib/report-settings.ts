@@ -98,3 +98,20 @@ export async function saveReportTimes(
   if (error) throw error;
   return normalizedTimes;
 }
+
+export const REPORT_TIME_SETTINGS_QUERY_KEY = ["report-time-settings"] as const;
+
+export const REPORT_TIME_SETTINGS_QUERY_OPTIONS = {
+  staleTime: 30_000,
+} as const;
+
+export async function fetchReportTimeSettings(
+  client: AppSupabaseClient,
+): Promise<{ activeReportTime: string; reportTimes: string[] }> {
+  const [activeReportTime, reportTimes] = await Promise.all([
+    fetchActiveReportTime(client),
+    fetchReportTimes(client),
+  ]);
+  return { activeReportTime, reportTimes };
+}
+
