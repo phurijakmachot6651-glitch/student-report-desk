@@ -85,13 +85,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "เช็คยอดกำลังพลร้อย๒" },
       {
         property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/13218a2e-70c2-4b06-8c4d-9f7d36515e18/id-preview-768695db--9bd12576-9a01-4096-92e2-e79d5301eb3d.lovable.app-1779897559685.png",
+        content: "https://student-report-desk.lovable.app/og-image.jpg",
       },
       {
         name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/13218a2e-70c2-4b06-8c4d-9f7d36515e18/id-preview-768695db--9bd12576-9a01-4096-92e2-e79d5301eb3d.lovable.app-1779897559685.png",
+        content: "https://student-report-desk.lovable.app/og-image.jpg",
       },
     ],
     links: [
