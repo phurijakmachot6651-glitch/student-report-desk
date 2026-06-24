@@ -85,11 +85,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "เช็คยอดกำลังพลร้อย๒" },
       {
         property: "og:image",
-        content: "https://student-report-desk.lovable.app/og-image.jpg",
+        content: "https://student-report-desk-red.vercel.app/og-image.jpg",
       },
       {
         name: "twitter:image",
-        content: "https://student-report-desk.lovable.app/og-image.jpg",
+        content: "https://student-report-desk-red.vercel.app/og-image.jpg",
       },
     ],
     links: [
