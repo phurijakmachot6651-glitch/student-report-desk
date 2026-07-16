@@ -29,6 +29,13 @@ export function formatThaiDate(date: Date): string {
   return `วัน${day}ที่ ${d} ${m} ${y}`;
 }
 
+function formatThaiDateWithoutWeekday(date: Date): string {
+  const d = toThaiNumerals(date.getDate());
+  const m = TH_MONTHS[date.getMonth()];
+  const y = toThaiNumerals(date.getFullYear() + 543);
+  return `วันที่ ${d} ${m} ${y}`;
+}
+
 export type DispatchCategory = "sick" | "leave" | "absent" | "official" | "suspended" | "other";
 
 export const CATEGORY_LABELS: Record<DispatchCategory, string> = {
@@ -66,6 +73,13 @@ export type ReportInput = {
   reporterPosition: string;
   reportTime: string;
   entries: Entry[];
+};
+
+export type StretchExerciseReportInput = {
+  companyName: string;
+  reportDate: Date;
+  reporterName: string;
+  reporterPosition: string;
 };
 
 export type CategoryCounts = Record<DispatchCategory, number>;
@@ -230,6 +244,24 @@ export function buildReportText(input: ReportInput): string {
   const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n");
 
   return `${header}\n${body}\n\nจึงเรียนมาเพื่อโปรดทราบ\n`;
+}
+
+export function buildStretchExerciseReportText(input: StretchExerciseReportInput): string {
+  return [
+    `${input.companyName}`,
+    "",
+    "**************************",
+    "",
+    "เรียน ผู้บังคับบัญชา",
+    "",
+    `กระผม ${input.reporterName || "-"}`,
+    `${input.reporterPosition || "-"} ขออนุญาตรายงานภาพการยืดเหยียดและกายบริหารของกองร้อยที่ ๒ รุ่นที่ ๘๒ ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
+    "",
+    "-การปฎิบัติเป็นไปด้วยความเรียบร้อย",
+    "",
+    "จึงเรียนมาเพื่อโปรดทราบ",
+    "",
+  ].join("\n");
 }
 
 function markdownCategoryBlock(cat: DispatchCategory, entries: Entry[]): string {

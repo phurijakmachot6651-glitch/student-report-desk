@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { LogIn, Users } from "lucide-react";
 import { summarizeDispatchEntries, todayISO, type Entry } from "@/lib/thai";
 import {
@@ -81,40 +83,65 @@ function Home() {
   });
 
   return (
-    <div className="relative min-h-screen bg-background">
-      <img src="/tiger-bg.jpg" alt="" className="fixed inset-0 h-full w-full object-contain opacity-20 pointer-events-none select-none" />
-      <header className="sticky top-0 z-20 border-b bg-card/90 backdrop-blur">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      {/* Tiger backdrop: cover image + gradient wash + stripe motif blended in */}
+      <div className="pointer-events-none fixed inset-0 select-none">
+        <img
+          src="/tiger-bg.jpg"
+          alt=""
+          className="h-full w-full object-cover opacity-[0.07] dark:opacity-[0.05]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background/60 to-background" />
+        <div className="tiger-stripes absolute inset-0 opacity-40" />
+      </div>
+
+      <header className="sticky top-0 z-20 border-b border-primary/15 bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:py-4">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <img
               src="/tiger_logo.png"
               alt="Tiger Logo"
-              className="h-8 w-8 shrink-0 rounded-full border border-primary/20 object-contain"
+              className="float-soft h-9 w-9 shrink-0 rounded-full border border-primary/30 object-contain shadow-sm ring-2 ring-primary/10"
             />
             <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">
               ยอดกำลังพล นรต. กองร้อยที่ ๒
             </h1>
           </div>
-          <Link to="/admin/login">
-            <Button variant="outline" size="sm" className="shrink-0 px-3">
-              <LogIn className="h-4 w-4" />
-              แอดมิน
-            </Button>
-          </Link>
+          <div className="flex shrink-0 items-center gap-1">
+            <ThemeToggle />
+            <Link to="/admin/login">
+              <Button variant="outline" size="sm" className="px-3">
+                <LogIn className="h-4 w-4" />
+                แอดมิน
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
-        <div className="mb-6 text-center sm:mb-10">
-          <h2 className="text-2xl font-bold leading-tight sm:text-3xl">เลือกหมวดเพื่อจำหน่ายยอด</h2>
+      <main className="relative mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
+        <div className="reveal mb-6 text-center sm:mb-10">
+          <h2 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+            <span className="gold-text">เลือกหมวดเพื่อจำหน่ายยอด</span>
+          </h2>
           <p className="mt-2 text-sm text-muted-foreground sm:text-base">
             เลือกหมวดของท่านเพื่อกรอกยอดกำลังพลประจำวัน
           </p>
+          <div className="gold-gradient mx-auto mt-4 h-1 w-24 rounded-full opacity-80" />
         </div>
 
         {isLoading ? (
-          <div className="rounded-lg border bg-card p-4 text-center text-sm text-muted-foreground">
-            กำลังโหลด...
+          <div className="space-y-6">
+            <div className="flex flex-wrap justify-center gap-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-24 rounded-full" />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 sm:gap-4 md:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-44 rounded-xl" />
+              ))}
+            </div>
           </div>
         ) : (
           <div className="space-y-6">
@@ -128,7 +155,9 @@ function Home() {
                     type="button"
                     variant={selected ? "default" : "outline"}
                     onClick={() => setSelectedReportTime(time)}
-                    className="h-10 min-w-24 shrink-0 snap-start backdrop-blur-sm"
+                    className={`h-10 min-w-24 shrink-0 snap-start rounded-full backdrop-blur-sm ${
+                      selected ? "glow-pulse" : ""
+                    }`}
                   >
                     เวลา {time}
                   </Button>
@@ -137,34 +166,38 @@ function Home() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 sm:gap-4 md:grid-cols-3">
-              {rows.map(({ company, summary }) => (
+              {rows.map(({ company, summary }, index) => (
                 <Link
                   key={company.id}
                   to="/company/$id"
                   params={{ id: company.id }}
                   search={{ date: reportDate, time: reportTime }}
-                  className="block h-full"
+                  className="reveal-stagger block h-full"
+                  style={{ "--i": index } as React.CSSProperties}
                 >
-                  <Card className="h-full cursor-pointer rounded-lg transition hover:border-primary hover:shadow-lg active:scale-[0.99] bg-card/95 backdrop-blur-sm shadow-md">
+                  <Card className="card-lift group h-full cursor-pointer overflow-hidden rounded-xl border-border/70 bg-card/95 shadow-md backdrop-blur-sm hover:border-primary/60">
+                    <div className="gold-gradient h-1 w-full opacity-70 transition-opacity group-hover:opacity-100" />
                     <CardHeader className="p-4 pb-3">
                       <CardTitle className="flex items-center gap-2 text-base">
-                        <Users className="h-5 w-5 shrink-0 text-primary" />
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary transition-transform group-hover:scale-110">
+                          <Users className="h-5 w-5" />
+                        </span>
                         {company.name}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3 p-4 pt-0">
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="rounded-md bg-muted/60 p-2">
+                        <div className="rounded-lg bg-muted/60 p-2">
                           <div className="text-muted-foreground">ยอดเต็ม</div>
                           <div className="font-semibold text-foreground">
                             {summary.fullStrength}
                           </div>
                         </div>
-                        <div className="rounded-md bg-orange-50 p-2 text-orange-700">
+                        <div className="rounded-lg bg-warning-muted/70 p-2 text-warning">
                           <div>จำหน่าย</div>
                           <div className="font-semibold">{summary.dispatched}</div>
                         </div>
-                        <div className="rounded-md bg-green-50 p-2 text-green-700">
+                        <div className="rounded-lg bg-success-muted/70 p-2 text-success">
                           <div>คงยอด</div>
                           <div className="font-semibold">{summary.remaining}</div>
                         </div>

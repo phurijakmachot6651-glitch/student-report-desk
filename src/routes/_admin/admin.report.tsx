@@ -7,9 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
-import { buildReportText, parseISODate, todayISO, type Entry } from "@/lib/thai";
+import {
+  buildReportText,
+  buildStretchExerciseReportText,
+  parseISODate,
+  todayISO,
+  type Entry,
+} from "@/lib/thai";
 import { DEFAULT_REPORT_TIME, getReportRow, normalizeReportTime } from "@/lib/report-rows";
 import { fetchActiveReportTime, fetchReportTimes } from "@/lib/report-settings";
 
@@ -17,12 +24,48 @@ export const Route = createFileRoute("/_admin/admin/report")({
   component: ReportPage,
 });
 
+type ReportTemplate = "strength" | "stretchExercise";
+
+type ReporterFields = {
+  selectedReporter: string;
+  reporterName: string;
+  reporterPosition: string;
+};
+
+const COMPANY_REPORT_HEADER =
+  "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)";
+
+const DEFAULT_REPORTER_FIELDS: Record<ReportTemplate, ReporterFields> = {
+  strength: {
+    selectedReporter: "",
+    reporterName: "นรต.ธัชชัย อ่อนแก้ว",
+    reporterPosition: "ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.",
+  },
+  stretchExercise: {
+    selectedReporter: "",
+    reporterName: "นรต.ธนพล นราพันธ์",
+    reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๒ ปค.๑ บก.ปค.",
+  },
+};
+
 function ReportPage() {
   const [date, setDate] = useState(todayISO());
-  const [selectedReporter, setSelectedReporter] = useState("");
-  const [reporterName, setReporterName] = useState("นรต.ธัชชัย อ่อนแก้ว");
-  const [reporterPosition, setReporterPosition] = useState("ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.");
   const [selectedReportTimeInput, setSelectedReportTimeInput] = useState<string | null>(null);
+  const [reportTemplate, setReportTemplate] = useState<ReportTemplate>("strength");
+  const [reporterFieldsByTemplate, setReporterFieldsByTemplate] =
+    useState<Record<ReportTemplate, ReporterFields>>(DEFAULT_REPORTER_FIELDS);
+  const { selectedReporter, reporterName, reporterPosition } =
+    reporterFieldsByTemplate[reportTemplate];
+
+  const updateReporterFields = (fields: Partial<ReporterFields>) => {
+    setReporterFieldsByTemplate((current) => ({
+      ...current,
+      [reportTemplate]: {
+        ...current[reportTemplate],
+        ...fields,
+      },
+    }));
+  };
 
   const { data: reportTimeSettings } = useQuery({
     queryKey: ["report-export-times"],
@@ -34,6 +77,7 @@ function ReportPage() {
 
       return { activeReportTime, reportTimes };
     },
+    enabled: reportTemplate === "strength",
   });
   const reportTimes = Array.from(
     new Set(
@@ -64,6 +108,7 @@ function ReportPage() {
       if (reportsResult.error) throw reportsResult.error;
       return { companies: companiesResult.data || [], reports: reportsResult.data || [] };
     },
+    enabled: reportTemplate === "strength",
   });
 
   const { data: reporters } = useQuery({
@@ -78,7 +123,7 @@ function ReportPage() {
     },
   });
 
-  const fullText = useMemo(() => {
+  const strengthReportText = useMemo(() => {
     if (!data) return "";
 
     const entries: Entry[] = [];
@@ -104,8 +149,7 @@ function ReportPage() {
     });
 
     return buildReportText({
-      companyName:
-        "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)",
+      companyName: COMPANY_REPORT_HEADER,
       fullStrength,
       reportDate: parseISODate(date),
       reporterName: reporterName || "-",
@@ -114,6 +158,20 @@ function ReportPage() {
       entries,
     });
   }, [data, date, reporterName, reporterPosition, selectedReportTime]);
+
+  const stretchExerciseReportText = useMemo(
+    () =>
+      buildStretchExerciseReportText({
+        companyName: COMPANY_REPORT_HEADER,
+        reportDate: parseISODate(date),
+        reporterName: reporterName || "-",
+        reporterPosition: reporterPosition || "-",
+      }),
+    [date, reporterName, reporterPosition],
+  );
+
+  const fullText =
+    reportTemplate === "stretchExercise" ? stretchExerciseReportText : strengthReportText;
 
   const copy = async () => {
     await navigator.clipboard.writeText(fullText);
@@ -125,19 +183,49 @@ function ReportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `report-${date}.txt`;
+    a.download =
+      reportTemplate === "stretchExercise"
+        ? `stretch-exercise-report-${date}.txt`
+        : `report-${date}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
-      <Card className="rounded-lg">
+      <Card className="reveal overflow-hidden rounded-xl">
+        <div className="gold-gradient h-1 w-full opacity-70" />
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
-          <CardTitle>ส่งออกคำรายงานรวม</CardTitle>
+          <CardTitle className="gold-text text-lg">ส่งออกคำรายงาน</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
-          <div className="grid sm:grid-cols-3 gap-3 items-end">
+          <Tabs
+            value={reportTemplate}
+            onValueChange={(value) => {
+              if (value) setReportTemplate(value as ReportTemplate);
+            }}
+          >
+            <TabsList className="grid h-auto w-full grid-cols-2">
+              <TabsTrigger
+                value="strength"
+                className="min-h-9 whitespace-normal px-2 py-1.5 text-center leading-tight"
+              >
+                ยอดกำลังพล
+              </TabsTrigger>
+              <TabsTrigger
+                value="stretchExercise"
+                className="min-h-9 whitespace-normal px-2 py-1.5 text-center leading-tight"
+              >
+                ยืดเหยียดและออกกำลังกาย
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div
+            className={`grid gap-3 items-end ${
+              reportTemplate === "strength" ? "sm:grid-cols-3" : "sm:grid-cols-2"
+            }`}
+          >
             <div>
               <Label>วันที่</Label>
               <Input
@@ -147,20 +235,22 @@ function ReportPage() {
                 className="w-full"
               />
             </div>
-            <div>
-              <Label>เวลารายงาน</Label>
-              <select
-                value={selectedReportTime}
-                onChange={(e) => setSelectedReportTimeInput(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
-              >
-                {reportTimes.map((time) => (
-                  <option key={time} value={time}>
-                    {time}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {reportTemplate === "strength" ? (
+              <div>
+                <Label>เวลารายงาน</Label>
+                <select
+                  value={selectedReportTime}
+                  onChange={(e) => setSelectedReportTimeInput(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
+                >
+                  {reportTimes.map((time) => (
+                    <option key={time} value={time}>
+                      {time}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Button onClick={copy} variant="outline" className="flex-1">
                 <Copy className="h-4 w-4 mr-1" /> คัดลอก
@@ -177,8 +267,10 @@ function ReportPage() {
               <select
                 value={selectedReporter}
                 onChange={(event) => {
-                  setSelectedReporter(event.target.value);
-                  setReporterName(event.target.value);
+                  updateReporterFields({
+                    selectedReporter: event.target.value,
+                    reporterName: event.target.value,
+                  });
                 }}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm"
               >
@@ -195,18 +287,20 @@ function ReportPage() {
               <Input
                 value={reporterName}
                 onChange={(e) => {
-                  setReporterName(e.target.value);
-                  setSelectedReporter("");
+                  updateReporterFields({
+                    reporterName: e.target.value,
+                    selectedReporter: "",
+                  });
                 }}
-                placeholder="นรต.ธัชชัย อ่อนแก้ว"
+                placeholder={DEFAULT_REPORTER_FIELDS[reportTemplate].reporterName}
               />
             </div>
             <div className="sm:col-span-2">
               <Label>ตำแหน่ง</Label>
               <Input
                 value={reporterPosition}
-                onChange={(e) => setReporterPosition(e.target.value)}
-                placeholder="ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค."
+                onChange={(e) => updateReporterFields({ reporterPosition: e.target.value })}
+                placeholder={DEFAULT_REPORTER_FIELDS[reportTemplate].reporterPosition}
               />
             </div>
           </div>

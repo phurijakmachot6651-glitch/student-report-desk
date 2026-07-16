@@ -18,10 +18,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { updateAdminRegisterSecret } from "@/lib/api/admin-auth.functions";
 import { DEFAULT_REPORT_TIME, isValidReportTime, normalizeReportTime } from "@/lib/report-rows";
-import { fetchReportTimes, saveReportTimes } from "@/lib/report-settings";
+import {
+  fetchReportTimes,
+  saveReportTimes,
+  REPORT_TIME_SETTINGS_QUERY_KEY,
+} from "@/lib/report-settings";
 
 export const Route = createFileRoute("/_admin/admin/settings")({
   component: Settings,
@@ -231,6 +235,7 @@ function Settings() {
       toast.success(`บันทึกเวลาแถวแล้ว (${savedTimes.join(", ")})`);
       setReportTimeRows(savedTimes.map((time) => ({ _local: crypto.randomUUID(), time })));
       qc.invalidateQueries({ queryKey: ["report-times"] });
+      qc.invalidateQueries({ queryKey: REPORT_TIME_SETTINGS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ["active-report-time"] });
       qc.invalidateQueries({ queryKey: ["company-report-times"] });
       qc.invalidateQueries({ queryKey: ["admin-report-times"] });
@@ -272,7 +277,11 @@ function Settings() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
-      <Card className="rounded-lg">
+      <Card
+        className="reveal-stagger overflow-hidden rounded-xl"
+        style={{ "--i": 0 } as React.CSSProperties}
+      >
+        <div className="gold-gradient h-1 w-full opacity-70" />
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
           <CardTitle>ตั้งค่าหมวด</CardTitle>
         </CardHeader>
@@ -310,7 +319,10 @@ function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-lg">
+      <Card
+        className="reveal-stagger rounded-xl"
+        style={{ "--i": 1 } as React.CSSProperties}
+      >
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
           <CardTitle>เวลาแถวสำหรับกรอกยอด</CardTitle>
         </CardHeader>
@@ -360,7 +372,10 @@ function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-lg">
+      <Card
+        className="reveal-stagger rounded-xl"
+        style={{ "--i": 2 } as React.CSSProperties}
+      >
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
           <CardTitle>รายชื่อผู้รายงาน</CardTitle>
         </CardHeader>
@@ -401,7 +416,10 @@ function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-lg">
+      <Card
+        className="reveal-stagger rounded-xl"
+        style={{ "--i": 3 } as React.CSSProperties}
+      >
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
           <CardTitle>Secret code สมัครแอดมิน</CardTitle>
         </CardHeader>
@@ -425,9 +443,16 @@ function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-lg border-destructive/50">
+      <Card
+        className="reveal-stagger overflow-hidden rounded-xl border-destructive/50 bg-destructive/5"
+        style={{ "--i": 4 } as React.CSSProperties}
+      >
+        <div className="h-1 w-full bg-destructive/60" />
         <CardHeader className="p-4 pb-2 sm:p-6 sm:pb-3">
-          <CardTitle className="text-destructive">โซนอันตราย</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            โซนอันตราย
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0 sm:p-6 sm:pt-0">
           <p className="text-sm text-muted-foreground">

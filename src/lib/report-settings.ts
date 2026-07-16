@@ -4,8 +4,19 @@ import type { Database } from "@/integrations/supabase/types";
 
 export const ACTIVE_REPORT_TIME_SETTING_KEY = "active_report_time";
 export const REPORT_TIMES_SETTING_KEY = "report_times";
+export const REPORT_TIME_SETTINGS_QUERY_KEY = ["report-time-settings"] as const;
+export const REPORT_TIME_SETTINGS_QUERY_OPTIONS = {
+  staleTime: 0,
+  refetchOnMount: "always",
+  refetchOnReconnect: "always",
+  refetchInterval: 10_000,
+} as const;
 
 type AppSupabaseClient = SupabaseClient<Database>;
+export type ReportTimeSettings = {
+  activeReportTime: string;
+  reportTimes: string[];
+};
 
 export function normalizeActiveReportTime(value: string | null | undefined): string {
   return isValidReportTime(value) ? normalizeReportTime(value) : DEFAULT_REPORT_TIME;
@@ -26,7 +37,10 @@ export function buildReportTimeOptions(
   activeReportTime: string | null | undefined,
   reportTimes: string[] | null | undefined,
 ): string[] {
-  return normalizeReportTimes([normalizeActiveReportTime(activeReportTime), ...(reportTimes || [])]);
+  return normalizeReportTimes([
+    normalizeActiveReportTime(activeReportTime),
+    ...(reportTimes || []),
+  ]);
 }
 
 function parseStoredReportTimes(value: string | null | undefined): string[] {
@@ -35,7 +49,9 @@ function parseStoredReportTimes(value: string | null | undefined): string[] {
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed)) {
-      return normalizeReportTimes(parsed.filter((item): item is string => typeof item === "string"));
+      return normalizeReportTimes(
+        parsed.filter((item): item is string => typeof item === "string"),
+      );
     }
   } catch {
     return normalizeReportTimes(value.split(","));
@@ -64,6 +80,17 @@ export async function fetchReportTimes(client: AppSupabaseClient): Promise<strin
   return parseStoredReportTimes(data?.value);
 }
 
+export async function fetchReportTimeSettings(
+  client: AppSupabaseClient,
+): Promise<ReportTimeSettings> {
+  const [activeReportTime, reportTimes] = await Promise.all([
+    fetchActiveReportTime(client),
+    fetchReportTimes(client),
+  ]);
+
+  return { activeReportTime, reportTimes };
+}
+
 export async function saveActiveReportTime(
   client: AppSupabaseClient,
   value: string,
@@ -71,10 +98,7 @@ export async function saveActiveReportTime(
   const normalizedTime = normalizeActiveReportTime(value);
   const { error } = await client
     .from("app_settings")
-    .upsert(
-      { key: ACTIVE_REPORT_TIME_SETTING_KEY, value: normalizedTime },
-      { onConflict: "key" },
-    );
+    .upsert({ key: ACTIVE_REPORT_TIME_SETTING_KEY, value: normalizedTime }, { onConflict: "key" });
   if (error) throw error;
   return normalizedTime;
 }
@@ -97,21 +121,5 @@ export async function saveReportTimes(
   );
   if (error) throw error;
   return normalizedTimes;
-}
-
-export const REPORT_TIME_SETTINGS_QUERY_KEY = ["report-time-settings"] as const;
-
-export const REPORT_TIME_SETTINGS_QUERY_OPTIONS = {
-  staleTime: 30_000,
-} as const;
-
-export async function fetchReportTimeSettings(
-  client: AppSupabaseClient,
-): Promise<{ activeReportTime: string; reportTimes: string[] }> {
-  const [activeReportTime, reportTimes] = await Promise.all([
-    fetchActiveReportTime(client),
-    fetchReportTimes(client),
-  ]);
-  return { activeReportTime, reportTimes };
 }
 

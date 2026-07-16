@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Plus, Trash2, ArrowLeft, Users, MinusCircle, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
   CATEGORY_LABELS,
@@ -310,22 +312,24 @@ function CompanyPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="tiger-stripes pointer-events-none fixed inset-0 opacity-30" />
+      <header className="sticky top-0 z-20 border-b border-primary/15 bg-card/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
           <Link
             to="/"
-            className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> กลับ
           </Link>
           <h1 className="min-w-0 truncate text-base font-bold">{company?.name || "กรอกยอด"}</h1>
-          <div className="w-16 shrink-0" />
+          <ThemeToggle className="shrink-0" />
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-4 px-3 py-4 pb-28 sm:px-4 sm:py-6">
-        <Card className="rounded-lg">
+      <main className="relative mx-auto max-w-3xl space-y-4 px-3 py-4 pb-28 sm:px-4 sm:py-6">
+        <Card className="reveal-stagger overflow-hidden rounded-xl" style={{ "--i": 0 } as React.CSSProperties}>
+          <div className="gold-gradient h-1 w-full opacity-70" />
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ข้อมูลทั่วไป</CardTitle>
           </CardHeader>
@@ -374,27 +378,36 @@ function CompanyPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-lg">
+        <Card
+          className="reveal-stagger rounded-xl"
+          style={{ "--i": 1 } as React.CSSProperties}
+        >
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ยอดสุทธิหลังบันทึก</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 p-4 pt-0">
-            <div className="grid grid-cols-3 gap-2 text-center text-sm">
-              <div className="rounded-md bg-muted/60 p-2.5 sm:p-3">
-                <div className="text-xs text-muted-foreground">ยอดเต็ม</div>
-                <div className="text-xl font-bold">{strengthSummary.fullStrength}</div>
-                <div className="text-xs text-muted-foreground">นาย</div>
-              </div>
-              <div className="rounded-md bg-orange-50 p-2.5 text-orange-700 sm:p-3">
-                <div className="text-xs">จำหน่าย</div>
-                <div className="text-xl font-bold">{strengthSummary.dispatched}</div>
-                <div className="text-xs">นาย</div>
-              </div>
-              <div className="rounded-md bg-green-50 p-2.5 text-green-700 sm:p-3">
-                <div className="text-xs">คงยอด</div>
-                <div className="text-xl font-bold">{strengthSummary.remaining}</div>
-                <div className="text-xs">นาย</div>
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              <StatCard
+                label="ยอดเต็ม"
+                value={strengthSummary.fullStrength}
+                unit="นาย"
+                tone="gold"
+                compact
+              />
+              <StatCard
+                label="จำหน่าย"
+                value={strengthSummary.dispatched}
+                unit="นาย"
+                tone="warning"
+                compact
+              />
+              <StatCard
+                label="คงยอด"
+                value={strengthSummary.remaining}
+                unit="นาย"
+                tone="success"
+                compact
+              />
             </div>
 
             <div className="space-y-1 text-sm">
@@ -432,12 +445,18 @@ function CompanyPage() {
           </CardContent>
         </Card>
 
-        {CATEGORY_ORDER.map((category) => {
+        {CATEGORY_ORDER.map((category, categoryIndex) => {
           const list = entries
             .map((entry, i) => ({ entry, i }))
             .filter((item) => item.entry.category === category);
           return (
-            <Card key={category} className={`rounded-lg ${list.length === 0 ? "bg-muted/20" : ""}`}>
+            <Card
+              key={category}
+              className={`reveal-stagger card-lift overflow-hidden rounded-xl border-l-4 ${
+                list.length === 0 ? "border-l-border bg-muted/20" : "border-l-primary/50"
+              }`}
+              style={{ "--i": categoryIndex } as React.CSSProperties}
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 pb-3">
                 <div>
                   <CardTitle className="text-base leading-tight">
@@ -572,14 +591,25 @@ function CompanyPage() {
           );
         })}
 
-        <div className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 rounded-lg border bg-background/95 p-3 shadow-lg backdrop-blur sm:bottom-4 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="font-medium">คงยอด {strengthSummary.remaining} นาย</div>
+        <div className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 overflow-hidden rounded-xl border border-primary/25 bg-background/90 p-3 shadow-lg backdrop-blur-md sm:bottom-4 sm:flex-row sm:items-center">
+          <div className="tiger-stripes pointer-events-none absolute inset-0 opacity-30" />
+          <div className="relative min-w-0 flex-1 text-sm">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xs text-muted-foreground">คงยอด</span>
+              <span className="gold-text text-xl font-bold leading-none">
+                {strengthSummary.remaining}
+              </span>
+              <span className="text-xs text-muted-foreground">นาย</span>
+            </div>
             <div className="text-xs text-muted-foreground">
               จำหน่าย {strengthSummary.dispatched} นาย
             </div>
           </div>
-          <Button onClick={handleSave} disabled={save.isPending} className="w-full sm:flex-1">
+          <Button
+            onClick={handleSave}
+            disabled={save.isPending}
+            className="relative w-full sm:flex-1"
+          >
             {save.isPending ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </div>

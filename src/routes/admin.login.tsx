@@ -47,24 +47,26 @@ function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-b from-background to-secondary/20 px-3 py-6 sm:p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-gradient-to-b from-primary/10 via-background to-secondary/20 px-3 py-6 sm:p-4">
+      <div className="tiger-stripes pointer-events-none absolute inset-0 opacity-40" />
+      <div className="reveal-pop relative w-full max-w-sm">
         <Link
           to="/"
-          className="mb-4 inline-flex h-10 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+          className="mb-4 inline-flex h-10 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> หน้าแรก
         </Link>
-        <Card className="rounded-lg">
+        <Card className="overflow-hidden rounded-xl shadow-lg">
+          <div className="gold-gradient h-1.5 w-full" />
           <CardHeader className="flex flex-col items-center p-4 text-center sm:p-6">
             <div className="mb-2">
               <img
                 src="/tiger_logo.png"
                 alt="Tiger Logo"
-                className="h-16 w-16 object-contain rounded-full border-2 border-primary/20 shadow-sm"
+                className="float-soft h-16 w-16 rounded-full border-2 border-primary/30 object-contain shadow-sm ring-4 ring-primary/10"
               />
             </div>
-            <CardTitle>แอดมิน</CardTitle>
+            <CardTitle className="gold-text text-xl">แอดมิน</CardTitle>
             <CardDescription>ระบบจัดทำยอดกำลังพล นรต.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">

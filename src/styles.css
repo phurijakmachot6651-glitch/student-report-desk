@@ -42,6 +42,15 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -79,6 +88,15 @@
   --accent-foreground: oklch(0.22 0.05 84);
   --destructive: oklch(0.55 0.2 25);
   --destructive-foreground: oklch(0.98 0.01 25);
+  --success: oklch(0.6 0.14 150);
+  --success-foreground: oklch(0.99 0.01 150);
+  --success-muted: oklch(0.95 0.05 150);
+  --warning: oklch(0.7 0.16 55);
+  --warning-foreground: oklch(0.99 0.01 55);
+  --warning-muted: oklch(0.95 0.06 65);
+  --info: oklch(0.62 0.13 240);
+  --info-foreground: oklch(0.99 0.01 240);
+  --info-muted: oklch(0.95 0.04 240);
   --border: oklch(0.9 0.03 85);
   --input: oklch(0.9 0.03 85);
   --ring: oklch(0.76 0.15 84);
@@ -114,6 +132,15 @@
   --accent-foreground: oklch(0.94 0.02 85);
   --destructive: oklch(0.5 0.18 25);
   --destructive-foreground: oklch(0.98 0.01 25);
+  --success: oklch(0.7 0.15 150);
+  --success-foreground: oklch(0.15 0.02 150);
+  --success-muted: oklch(0.28 0.06 150);
+  --warning: oklch(0.78 0.16 65);
+  --warning-foreground: oklch(0.15 0.02 65);
+  --warning-muted: oklch(0.3 0.07 60);
+  --info: oklch(0.7 0.13 240);
+  --info-foreground: oklch(0.15 0.02 240);
+  --info-muted: oklch(0.3 0.06 240);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.78 0.15 84);
@@ -162,5 +189,253 @@
   textarea,
   button {
     font: inherit;
+  }
+}
+
+/*
+ * Motion system.
+ *
+ * Keyframes power page-entry reveals, skeleton shimmer, glowing accents and
+ * the tiger-stripe motif. Utility classes below wrap them for reuse.
+ * All motion is disabled under prefers-reduced-motion at the end of the file.
+ */
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reveal-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -150% 0;
+  }
+  to {
+    background-position: 150% 0;
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--glow-color, oklch(0.76 0.15 84 / 35%));
+  }
+  50% {
+    box-shadow: 0 0 18px 3px var(--glow-color, oklch(0.76 0.15 84 / 45%));
+  }
+}
+
+@keyframes stripe-pan {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 56px 0;
+  }
+}
+
+@keyframes count-pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes splash-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes logo-glow-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+    box-shadow: 0 0 0 0 oklch(0.76 0.15 84 / 0%);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 32px 8px oklch(0.76 0.15 84 / 50%);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 18px 4px oklch(0.76 0.15 84 / 30%);
+  }
+}
+
+@utility splash-exit {
+  animation: splash-exit 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  pointer-events: none;
+}
+
+@utility bar-fill {
+  transform-origin: left center;
+  animation: bar-fill 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility logo-glow-in {
+  animation: logo-glow-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility reveal {
+  animation: reveal-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility reveal-pop {
+  animation: reveal-scale 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger helper: set --i on each item to offset its entry. */
+@utility reveal-stagger {
+  animation: reveal-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+@utility count-pop {
+  animation: count-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility float-soft {
+  animation: float-soft 4s ease-in-out infinite;
+}
+
+@utility glow-pulse {
+  animation: glow-pulse 2.4s ease-in-out infinite;
+}
+
+/* Gold gradient fill for surfaces (headers, hero, primary stats). */
+@utility gold-gradient {
+  background-image: linear-gradient(
+    135deg,
+    oklch(0.82 0.16 88),
+    oklch(0.74 0.16 78) 45%,
+    oklch(0.66 0.14 66)
+  );
+}
+
+/* Gold gradient clipped to text — for big numbers / titles. */
+@utility gold-text {
+  background-image: linear-gradient(
+    120deg,
+    oklch(0.78 0.16 88),
+    oklch(0.62 0.15 62)
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Diagonal tiger-stripe texture layer. Pair with position: relative. */
+@utility tiger-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--stripe-color, oklch(0.66 0.14 66 / 8%)) 0,
+    var(--stripe-color, oklch(0.66 0.14 66 / 8%)) 10px,
+    transparent 10px,
+    transparent 28px
+  );
+  background-size: 56px 56px;
+}
+
+@utility tiger-stripes-animated {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--stripe-color, oklch(0.66 0.14 66 / 8%)) 0,
+    var(--stripe-color, oklch(0.66 0.14 66 / 8%)) 10px,
+    transparent 10px,
+    transparent 28px
+  );
+  background-size: 56px 56px;
+  animation: stripe-pan 3s linear infinite;
+}
+
+/* Hover lift used across cards. */
+@utility card-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease;
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 28px -12px oklch(0.55 0.12 66 / 45%);
+  }
+}
+
+/* Shimmer skeleton surface. */
+@utility shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--muted);
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0,
+      oklch(1 0 0 / 25%) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

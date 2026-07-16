@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2 } from "lucide-react";
+import { Trash2, Users, UserMinus, UserCheck, ShieldCheck, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { CATEGORY_LABELS, CATEGORY_ORDER, todayISO, type DispatchCategory } from "@/lib/thai";
 import {
@@ -155,15 +157,20 @@ function MobileSummaryRow({
   selectedReportTime,
   onClear,
   isClearing,
+  index = 0,
 }: {
   row: AdminSummaryRow;
   date: string;
   selectedReportTime: string;
   onClear: (target: ClearCompanyTarget) => void;
   isClearing: boolean;
+  index?: number;
 }) {
   return (
-    <Card className="rounded-lg">
+    <Card
+      className="reveal-stagger card-lift overflow-hidden rounded-xl border-l-4 border-l-primary/40"
+      style={{ "--i": index } as React.CSSProperties}
+    >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -185,15 +192,15 @@ function MobileSummaryRow({
         </div>
 
         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-          <div className="rounded-md bg-muted/60 p-2">
+          <div className="rounded-lg bg-muted/60 p-2">
             <div className="text-muted-foreground">เต็ม</div>
             <div className="font-semibold">{row.company.full_strength}</div>
           </div>
-          <div className="rounded-md bg-orange-50 p-2 text-orange-700">
+          <div className="rounded-lg bg-warning-muted/70 p-2 text-warning">
             <div>จำหน่าย</div>
             <div className="font-semibold">{row.dispatched}</div>
           </div>
-          <div className="rounded-md bg-green-50 p-2 text-green-700">
+          <div className="rounded-lg bg-success-muted/70 p-2 text-success">
             <div>คงยอด</div>
             <div className="font-semibold">{row.remaining}</div>
           </div>
@@ -423,23 +430,49 @@ function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground">ยอดเต็มรวม</div>
-          <div className="text-2xl font-bold">{totalFull}</div>
-        </Card>
-        <Card className="p-4 space-y-3">
-          <div className="text-xs text-muted-foreground">จำหน่ายรวม</div>
-          <div className="text-2xl font-bold text-orange-600">{totalDispatched}</div>
+        <StatCard
+          className="reveal-stagger card-lift"
+          style={{ "--i": 0 } as React.CSSProperties}
+          label="ยอดเต็มรวม"
+          value={totalFull}
+          unit="นาย"
+          tone="gold"
+          icon={Users}
+        />
+        <div
+          className="reveal-stagger card-lift relative flex flex-col gap-3 overflow-hidden rounded-xl border border-warning/30 bg-warning-muted/60 p-4 shadow-sm"
+          style={{ "--i": 1 } as React.CSSProperties}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-xs font-medium text-warning/80">จำหน่ายรวม</div>
+              <div className="count-pop mt-1 text-3xl font-bold leading-none tracking-tight text-warning">
+                {totalDispatched}
+                <span className="ml-1 text-xs font-medium text-warning/80">นาย</span>
+              </div>
+            </div>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/15 text-warning">
+              <UserMinus className="h-5 w-5" />
+            </span>
+          </div>
           <CategoryCountBadges counts={totalCategoryCounts} />
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-muted-foreground">คงเหลือรวม</div>
-          <div className="text-2xl font-bold text-green-600">{totalRemaining}</div>
-        </Card>
+        </div>
+        <StatCard
+          className="reveal-stagger card-lift"
+          style={{ "--i": 2 } as React.CSSProperties}
+          label="คงเหลือรวม"
+          value={totalRemaining}
+          unit="นาย"
+          tone="success"
+          icon={UserCheck}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-3 rounded-lg p-4">
+        <Card
+          className="reveal-stagger space-y-3 rounded-xl p-4"
+          style={{ "--i": 0 } as React.CSSProperties}
+        >
           <div>
             <div className="text-base font-semibold">หมวดยังไม่ส่ง</div>
             <div className="text-sm text-muted-foreground">
@@ -447,13 +480,16 @@ function AdminDashboard() {
             </div>
           </div>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">กำลังโหลดข้อมูลรายงาน...</p>
+            <div className="space-y-2">
+              <Skeleton className="h-16 rounded-md" />
+              <Skeleton className="h-8 w-40 rounded-md" />
+            </div>
           ) : missingRows.length > 0 ? (
             <>
-              <div className="rounded-md bg-muted/50 p-3">
-                <div className="text-sm text-muted-foreground">จำนวนหมวดที่ยังไม่ส่ง</div>
-                <div className="flex items-baseline gap-1 text-orange-600">
-                  <span className="text-2xl font-bold">{missingRows.length}</span>
+              <div className="rounded-md border border-warning/30 bg-warning-muted/60 p-3">
+                <div className="text-sm text-warning/80">จำนวนหมวดที่ยังไม่ส่ง</div>
+                <div className="flex items-baseline gap-1 text-warning">
+                  <span className="count-pop text-2xl font-bold">{missingRows.length}</span>
                   <span className="text-sm">หมวด</span>
                 </div>
               </div>
@@ -472,19 +508,22 @@ function AdminDashboard() {
             </>
           ) : (
             <>
-              <div className="rounded-md bg-green-50 p-3 text-green-700">
+              <div className="rounded-md border border-success/30 bg-success-muted/60 p-3 text-success">
                 <div className="text-sm">จำนวนหมวดที่ยังไม่ส่ง</div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold">0</span>
+                  <span className="count-pop text-2xl font-bold">0</span>
                   <span className="text-sm">หมวด</span>
                 </div>
               </div>
-              <p className="text-sm text-green-700">ส่งครบทุกหมวดแล้ว</p>
+              <p className="text-sm text-success">ส่งครบทุกหมวดแล้ว</p>
             </>
           )}
         </Card>
 
-        <Card className="space-y-3 rounded-lg p-4">
+        <Card
+          className="reveal-stagger space-y-3 rounded-xl p-4"
+          style={{ "--i": 1 } as React.CSSProperties}
+        >
           <div>
             <div className="text-base font-semibold">ตรวจยอดผิดปกติ</div>
             <div className="text-sm text-muted-foreground">
@@ -492,13 +531,16 @@ function AdminDashboard() {
             </div>
           </div>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">กำลังตรวจข้อมูล...</p>
+            <div className="space-y-2">
+              <Skeleton className="h-16 rounded-md" />
+              <Skeleton className="h-12 rounded-md" />
+            </div>
           ) : warningRows.length > 0 ? (
             <>
-              <div className="rounded-md bg-red-50 p-3 text-destructive">
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">
                 <div className="text-sm">จำนวนหมวดที่พบปัญหา</div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold">{warningRows.length}</span>
+                  <span className="count-pop text-2xl font-bold">{warningRows.length}</span>
                   <span className="text-sm">หมวด</span>
                 </div>
               </div>
@@ -521,14 +563,14 @@ function AdminDashboard() {
             </>
           ) : (
             <>
-              <div className="rounded-md bg-green-50 p-3 text-green-700">
+              <div className="rounded-md border border-success/30 bg-success-muted/60 p-3 text-success">
                 <div className="text-sm">จำนวนหมวดที่พบปัญหา</div>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold">0</span>
+                  <span className="count-pop text-2xl font-bold">0</span>
                   <span className="text-sm">หมวด</span>
                 </div>
               </div>
-              <p className="text-sm text-green-700">ไม่พบยอดผิดปกติ</p>
+              <p className="text-sm text-success">ไม่พบยอดผิดปกติ</p>
             </>
           )}
         </Card>
@@ -536,11 +578,9 @@ function AdminDashboard() {
 
       <div className="space-y-3 md:hidden">
         {isLoading ? (
-          <Card className="rounded-lg">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              กำลังโหลดข้อมูลรายงาน...
-            </CardContent>
-          </Card>
+          Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-52 rounded-xl" />
+          ))
         ) : isError ? (
           <Card className="rounded-lg">
             <CardContent className="p-4 text-sm text-destructive">
@@ -554,10 +594,11 @@ function AdminDashboard() {
             </CardContent>
           </Card>
         ) : (
-          rows.map((row) => (
+          rows.map((row, index) => (
             <MobileSummaryRow
               key={row.company.id}
               row={row}
+              index={index}
               date={date}
               selectedReportTime={selectedReportTime}
               onClear={setClearCompanyTarget}
@@ -584,11 +625,13 @@ function AdminDashboard() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                  กำลังโหลดข้อมูลรายงาน...
-                </TableCell>
-              </TableRow>
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={9} className="py-3">
+                    <Skeleton className="h-6 w-full rounded-md" />
+                  </TableCell>
+                </TableRow>
+              ))
             ) : isError ? (
               <TableRow>
                 <TableCell colSpan={9} className="h-24 text-center text-destructive">
@@ -602,8 +645,12 @@ function AdminDashboard() {
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <TableRow key={row.company.id}>
+              rows.map((row, index) => (
+                <TableRow
+                  key={row.company.id}
+                  className="reveal-stagger transition-colors hover:bg-primary/5"
+                  style={{ "--i": index } as React.CSSProperties}
+                >
                   <TableCell className="font-medium">{row.company.name}</TableCell>
                   <TableCell>
                     {row.row?.reporterName ? (
