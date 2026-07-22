@@ -7,43 +7,49 @@ type StatTone = "gold" | "neutral" | "success" | "warning" | "info" | "destructi
 
 const toneStyles: Record<
   StatTone,
-  { surface: string; value: string; icon: string; label: string }
+  { surface: string; value: string; icon: string; label: string; accent: string }
 > = {
   gold: {
     surface: "border-primary/30 bg-primary/5",
     value: "gold-text",
     icon: "bg-primary/15 text-primary",
     label: "text-muted-foreground",
+    accent: "gold-gradient",
   },
   neutral: {
     surface: "border-border bg-muted/40",
     value: "text-foreground",
     icon: "bg-muted text-muted-foreground",
     label: "text-muted-foreground",
+    accent: "bg-muted-foreground/30",
   },
   success: {
     surface: "border-success/30 bg-success-muted/60",
     value: "text-success",
     icon: "bg-success/15 text-success",
     label: "text-success/80",
+    accent: "bg-success/50",
   },
   warning: {
     surface: "border-warning/30 bg-warning-muted/60",
     value: "text-warning",
     icon: "bg-warning/15 text-warning",
     label: "text-warning/80",
+    accent: "bg-warning/50",
   },
   info: {
     surface: "border-info/30 bg-info-muted/60",
     value: "text-info",
     icon: "bg-info/15 text-info",
     label: "text-info/80",
+    accent: "bg-info/50",
   },
   destructive: {
     surface: "border-destructive/30 bg-destructive/5",
     value: "text-destructive",
     icon: "bg-destructive/15 text-destructive",
     label: "text-destructive/80",
+    accent: "bg-destructive/50",
   },
 };
 
@@ -75,6 +81,8 @@ const StatCard = React.forwardRef<HTMLDivElement, StatCardProps>(
         )}
         {...props}
       >
+        {/* Top accent bar */}
+        <div className={cn("absolute inset-x-0 top-0 h-0.5 rounded-t-xl", styles.accent)} />
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className={cn("text-xs font-medium", styles.label)}>{label}</div>

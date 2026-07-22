@@ -405,9 +405,30 @@
     box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.25s ease;
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 28px -12px oklch(0.55 0.12 66 / 45%);
+    transform: translateY(-5px);
+    box-shadow:
+      0 16px 32px -10px oklch(0.55 0.12 66 / 40%),
+      0 4px 12px -4px oklch(0.76 0.15 84 / 20%);
   }
+}
+
+/* Glassmorphism card surface — backdrop blur + translucent fill. */
+@utility glass-card {
+  background: oklch(from var(--card) l c h / 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid oklch(from var(--primary) l c h / 0.18);
+  box-shadow: 0 2px 16px -4px oklch(0.55 0.12 66 / 18%);
+}
+
+/* Animated fill for dispatch progress bars. */
+@keyframes bar-slide-in {
+  from { width: 0; }
+  to   { width: var(--bar-width, 0%); }
+}
+
+@utility bar-slide-in {
+  animation: bar-slide-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Shimmer skeleton surface. */

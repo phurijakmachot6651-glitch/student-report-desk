@@ -27,7 +27,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Users, UserMinus, UserCheck, ShieldCheck, AlertTriangle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Trash2, Users, UserMinus, UserCheck, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { CATEGORY_LABELS, CATEGORY_ORDER, todayISO, type DispatchCategory } from "@/lib/thai";
 import {
@@ -186,8 +193,15 @@ function MobileSummaryRow({
               )}
             </div>
           </div>
-          <Badge variant={row.row ? "default" : "secondary"} className="shrink-0">
-            {row.row ? "ส่งแล้ว" : "ยังไม่ส่ง"}
+          <Badge
+            variant={row.row ? "default" : "outline"}
+            className={
+              row.row
+                ? "shrink-0 border-success/30 bg-success/15 text-success hover:bg-success/20"
+                : "shrink-0 border-warning/40 text-warning"
+            }
+          >
+            {row.row ? "✓ ส่งแล้ว" : "รอส่ง"}
           </Badge>
         </div>
 
@@ -414,22 +428,58 @@ function AdminDashboard() {
           </div>
           <div>
             <Label>เวลาแถว</Label>
-            <select
-              value={selectedReportTime}
-              onChange={(e) => setSelectedReportTimeInput(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base md:w-48 md:text-sm"
-            >
-              {reportTimes.map((time) => (
-                <option key={time} value={time}>
-                  {time}
-                </option>
-              ))}
-            </select>
+            <Select value={selectedReportTime} onValueChange={setSelectedReportTimeInput}>
+              <SelectTrigger className="w-full md:w-48">
+                <SelectValue placeholder="เลือกเวลา" />
+              </SelectTrigger>
+              <SelectContent>
+                {reportTimes.map((time) => (
+                  <SelectItem key={time} value={time}>
+                    {time}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
+        {/* Submission progress strip */}
+        {rows.length > 0 && (
+          <div className="reveal-stagger overflow-hidden rounded-xl border border-primary/20 bg-card/90 p-4 shadow-sm md:col-span-3"
+            style={{ "--i": 0 } as React.CSSProperties}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {missingRows.length === 0 ? (
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                ) : (
+                  <Users className="h-4 w-4 text-primary" />
+                )}
+                <span className="text-sm font-semibold">
+                  {missingRows.length === 0 ? "ส่งยอดครบทุกหมวดแล้ว" : "ความคืบหน้าการส่งยอด"}
+                </span>
+              </div>
+              <span className="text-sm font-bold">
+                <span className={missingRows.length === 0 ? "text-success" : "text-primary"}>
+                  {rows.length - missingRows.length}
+                </span>
+                <span className="text-muted-foreground">/{rows.length} หมวด</span>
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={`bar-slide-in h-full rounded-full transition-all ${missingRows.length === 0 ? "bg-success" : "gold-gradient"}`}
+                style={{
+                  "--bar-width": `${rows.length > 0 ? Math.round(((rows.length - missingRows.length) / rows.length) * 100) : 0}%`,
+                  width: `${rows.length > 0 ? Math.round(((rows.length - missingRows.length) / rows.length) * 100) : 0}%`,
+                } as React.CSSProperties}
+              />
+            </div>
+          </div>
+        )}
+
         <StatCard
           className="reveal-stagger card-lift"
           style={{ "--i": 0 } as React.CSSProperties}
@@ -648,7 +698,13 @@ function AdminDashboard() {
               rows.map((row, index) => (
                 <TableRow
                   key={row.company.id}
-                  className="reveal-stagger transition-colors hover:bg-primary/5"
+                  className={`reveal-stagger transition-colors ${
+                    row.warnings.length > 0
+                      ? "bg-destructive/5 hover:bg-destructive/10"
+                      : !row.row
+                        ? "bg-warning-muted/30 hover:bg-warning-muted/50"
+                        : "hover:bg-primary/5"
+                  }`}
                   style={{ "--i": index } as React.CSSProperties}
                 >
                   <TableCell className="font-medium">{row.company.name}</TableCell>
@@ -679,9 +735,13 @@ function AdminDashboard() {
                   <TableCell className="text-right">{row.remaining}</TableCell>
                   <TableCell>
                     {row.row ? (
-                      <Badge>ส่งแล้ว</Badge>
+                      <Badge className="border-success/30 bg-success/15 text-success hover:bg-success/20">
+                        ✓ ส่งแล้ว
+                      </Badge>
                     ) : (
-                      <Badge variant="secondary">ยังไม่ส่ง</Badge>
+                      <Badge variant="outline" className="border-warning/40 text-warning">
+                        รอส่ง
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

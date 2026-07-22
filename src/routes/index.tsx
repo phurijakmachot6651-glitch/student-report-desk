@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LogIn, Users } from "lucide-react";
+import { LogIn, Users, CheckCircle2 } from "lucide-react";
 import { summarizeDispatchEntries, todayISO, type Entry } from "@/lib/thai";
 import {
   DEFAULT_REPORT_TIME,
@@ -29,6 +30,16 @@ export const Route = createFileRoute("/")({
   }),
   component: Home,
 });
+
+function toThaiDate(isoDate: string) {
+  const date = new Date(isoDate + "T00:00:00");
+  return date.toLocaleDateString("th-TH", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 function Home() {
   const reportDate = todayISO();
@@ -78,13 +89,19 @@ function Home() {
     const match = getReportRowFromReports(companyReports, reportTime);
     const entries = (match?.row?.entries || []) as Entry[];
     const summary = summarizeDispatchEntries(entries, company.full_strength);
+    const hasReport = !!match?.row;
 
-    return { company, summary };
+    return { company, summary, hasReport };
   });
+
+  const submittedCount = rows.filter((r) => r.hasReport).length;
+  const totalCount = rows.length;
+  const submissionPct = totalCount > 0 ? Math.round((submittedCount / totalCount) * 100) : 0;
+  const allSubmitted = submittedCount === totalCount && totalCount > 0;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      {/* Tiger backdrop: cover image + gradient wash + stripe motif blended in */}
+      {/* Tiger backdrop */}
       <div className="pointer-events-none fixed inset-0 select-none">
         <img
           src="/tiger-bg.jpg"
@@ -120,18 +137,20 @@ function Home() {
       </header>
 
       <main className="relative mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
+        {/* Hero heading */}
         <div className="reveal mb-6 text-center sm:mb-10">
-          <h2 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+          <h2 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
             <span className="gold-text">เลือกหมวดเพื่อจำหน่ายยอด</span>
           </h2>
           <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-            เลือกหมวดของท่านเพื่อกรอกยอดกำลังพลประจำวัน
+            {toThaiDate(reportDate)}
           </p>
           <div className="gold-gradient mx-auto mt-4 h-1 w-24 rounded-full opacity-80" />
         </div>
 
         {isLoading ? (
           <div className="space-y-6">
+            <Skeleton className="mx-auto h-16 max-w-md rounded-xl" />
             <div className="flex flex-wrap justify-center gap-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-24 rounded-full" />
@@ -145,6 +164,39 @@ function Home() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Submission progress strip */}
+            {totalCount > 0 && (
+              <div
+                className="reveal mx-auto max-w-md overflow-hidden rounded-xl border border-primary/20 bg-card/90 p-4 shadow-sm backdrop-blur-sm"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {allSubmitted ? (
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                    ) : (
+                      <Users className="h-4 w-4 text-primary" />
+                    )}
+                    <span className="text-sm font-medium">
+                      {allSubmitted ? "ส่งยอดครบทุกหมวดแล้ว" : "ความคืบหน้าการส่งยอด"}
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold">
+                    <span className={allSubmitted ? "text-success" : "text-primary"}>
+                      {submittedCount}
+                    </span>
+                    <span className="text-muted-foreground">/{totalCount} หมวด</span>
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`bar-slide-in h-full rounded-full ${allSubmitted ? "bg-success" : "gold-gradient"}`}
+                    style={{ "--bar-width": `${submissionPct}%`, width: `${submissionPct}%` } as React.CSSProperties}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Report time selector */}
             <div className="-mx-3 flex snap-x items-center gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
               {reportTimes.map((time) => {
                 const selected = time === reportTime;
@@ -165,77 +217,137 @@ function Home() {
               })}
             </div>
 
+            {/* Company card grid */}
             <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 sm:gap-4 md:grid-cols-3">
-              {rows.map(({ company, summary }, index) => (
-                <Link
-                  key={company.id}
-                  to="/company/$id"
-                  params={{ id: company.id }}
-                  search={{ date: reportDate, time: reportTime }}
-                  className="reveal-stagger block h-full"
-                  style={{ "--i": index } as React.CSSProperties}
-                >
-                  <Card className="card-lift group h-full cursor-pointer overflow-hidden rounded-xl border-border/70 bg-card/95 shadow-md backdrop-blur-sm hover:border-primary/60">
-                    <div className="gold-gradient h-1 w-full opacity-70 transition-opacity group-hover:opacity-100" />
-                    <CardHeader className="p-4 pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary transition-transform group-hover:scale-110">
-                          <Users className="h-5 w-5" />
-                        </span>
-                        {company.name}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 p-4 pt-0">
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="rounded-lg bg-muted/60 p-2">
-                          <div className="text-muted-foreground">ยอดเต็ม</div>
-                          <div className="font-semibold text-foreground">
-                            {summary.fullStrength}
+              {rows.map(({ company, summary, hasReport }, index) => {
+                const dispatchPct =
+                  summary.fullStrength > 0
+                    ? Math.min(100, Math.round((summary.dispatched / summary.fullStrength) * 100))
+                    : 0;
+
+                return (
+                  <Link
+                    key={company.id}
+                    to="/company/$id"
+                    params={{ id: company.id }}
+                    search={{ date: reportDate, time: reportTime }}
+                    className="reveal-stagger block h-full"
+                    style={{ "--i": index } as React.CSSProperties}
+                  >
+                    <Card
+                      className={`card-lift group h-full cursor-pointer overflow-hidden rounded-xl shadow-md backdrop-blur-sm ${
+                        hasReport
+                          ? "border-success/40 bg-card/95 hover:border-success/60"
+                          : "border-border/70 bg-card/95 hover:border-primary/60"
+                      }`}
+                    >
+                      {/* Top accent bar */}
+                      <div
+                        className={`h-1 w-full transition-opacity group-hover:opacity-100 ${
+                          hasReport ? "bg-success/60" : "gold-gradient opacity-70"
+                        }`}
+                      />
+
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="flex items-center justify-between gap-2 text-base">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-110 ${
+                                hasReport
+                                  ? "bg-success/15 text-success"
+                                  : "bg-primary/15 text-primary"
+                              }`}
+                            >
+                              <Users className="h-5 w-5" />
+                            </span>
+                            <span className="truncate">{company.name}</span>
+                          </div>
+                          <Badge
+                            variant={hasReport ? "default" : "secondary"}
+                            className={`shrink-0 text-[11px] ${
+                              hasReport
+                                ? "border-success/30 bg-success/15 text-success hover:bg-success/20"
+                                : ""
+                            }`}
+                          >
+                            {hasReport ? "✓ ส่งแล้ว" : "รอส่ง"}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+
+                      <CardContent className="space-y-3 p-4 pt-0">
+                        {/* 3-stat grid — คงยอด is deliberately larger */}
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="rounded-lg bg-muted/60 px-2 py-2">
+                            <div className="text-[11px] text-muted-foreground">ยอดเต็ม</div>
+                            <div className="text-sm font-semibold text-foreground">
+                              {summary.fullStrength}
+                            </div>
+                          </div>
+                          <div className="rounded-lg bg-warning-muted/70 px-2 py-2 text-warning">
+                            <div className="text-[11px]">จำหน่าย</div>
+                            <div className="text-sm font-semibold">{summary.dispatched}</div>
+                          </div>
+                          <div className="rounded-lg bg-success-muted/70 px-2 py-2 text-success">
+                            <div className="text-[11px]">คงยอด</div>
+                            <div className="text-lg font-bold leading-tight">{summary.remaining}</div>
                           </div>
                         </div>
-                        <div className="rounded-lg bg-warning-muted/70 p-2 text-warning">
-                          <div>จำหน่าย</div>
-                          <div className="font-semibold">{summary.dispatched}</div>
-                        </div>
-                        <div className="rounded-lg bg-success-muted/70 p-2 text-success">
-                          <div>คงยอด</div>
-                          <div className="font-semibold">{summary.remaining}</div>
-                        </div>
-                      </div>
 
-                      <div className="space-y-1 text-xs">
-                        {summary.items.length > 0 ? (
-                          summary.items.map((item) => (
+                        {/* Dispatch progress bar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span>สัดส่วนจำหน่าย</span>
+                            <span>{dispatchPct}%</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                             <div
-                              key={`${item.category}-${item.label}`}
-                              className="rounded-md bg-muted/30 px-2 py-1.5"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="min-w-0 font-medium">{item.label}</span>
-                                <span className="shrink-0 font-medium">{item.count} นาย</span>
-                              </div>
-                              {item.details.length > 0 && (
-                                <div className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
-                                  {item.details.map((detail, index) => (
-                                    <div
-                                      key={`${item.category}-${item.label}-${index}`}
-                                      className="break-words"
-                                    >
-                                      {detail}
-                                    </div>
-                                  ))}
+                              className="bar-slide-in h-full rounded-full bg-warning/70"
+                              style={
+                                {
+                                  "--bar-width": `${dispatchPct}%`,
+                                  width: `${dispatchPct}%`,
+                                } as React.CSSProperties
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        {/* Dispatch detail items */}
+                        <div className="space-y-1 text-xs">
+                          {summary.items.length > 0 ? (
+                            summary.items.map((item) => (
+                              <div
+                                key={`${item.category}-${item.label}`}
+                                className="rounded-md bg-muted/30 px-2 py-1.5"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="min-w-0 font-medium">{item.label}</span>
+                                  <span className="shrink-0 font-medium">{item.count} นาย</span>
                                 </div>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-muted-foreground">ไม่มีรายการจำหน่าย</div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+                                {item.details.length > 0 && (
+                                  <div className="mt-1 space-y-0.5 text-[11px] leading-4 text-muted-foreground">
+                                    {item.details.map((detail, idx) => (
+                                      <div
+                                        key={`${item.category}-${item.label}-${idx}`}
+                                        className="break-words"
+                                      >
+                                        {detail}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-muted-foreground">ไม่มีรายการจำหน่าย</div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         )}
