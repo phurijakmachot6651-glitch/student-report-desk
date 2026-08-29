@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { thaiToArabicNumerals } from "@/lib/thai-numerals";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +37,14 @@ import {
 } from "@/components/ui/select";
 import { Trash2, Users, UserMinus, UserCheck, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { CATEGORY_LABELS, CATEGORY_ORDER, todayISO, type DispatchCategory } from "@/lib/thai";
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  countDispatchEntry,
+  splitCadetNames,
+  todayISO,
+  type DispatchCategory,
+} from "@/lib/thai";
 import {
   DEFAULT_REPORT_TIME,
   decodeReportRows,
@@ -55,6 +63,7 @@ type SummaryEntry = {
   category: DispatchCategory;
   count: number | null;
   subcategory?: string | null;
+  cadet_name?: string | null;
 };
 
 type CategoryCounts = Record<DispatchCategory, number>;
@@ -81,7 +90,11 @@ const emptyCategoryCounts = (): CategoryCounts =>
   Object.fromEntries(CATEGORY_ORDER.map((category) => [category, 0])) as CategoryCounts;
 
 const countEntry = (entry: SummaryEntry) =>
-  entry.category === "other" ? Number(entry.count) || 0 : 1;
+  countDispatchEntry({
+    category: entry.category,
+    count: Number(entry.count) || 0,
+    cadet_name: entry.cadet_name || "",
+  });
 
 const summarizeEntries = (entries: SummaryEntry[]): CategoryCounts => {
   const counts = emptyCategoryCounts();
@@ -98,6 +111,9 @@ const findEntryWarnings = (entries: SummaryEntry[]) => {
 
   entries.forEach((entry) => {
     if (entry.category !== "other") return;
+
+    // จำหน่ายตามรายชื่อ ไม่ต้องมีหัวข้อ/จำนวนกำกับ
+    if (splitCadetNames(entry.cadet_name).length > 0) return;
 
     if (!entry.subcategory?.trim()) {
       warnings.push("อื่น ๆ ไม่ใส่ชื่อภารกิจ");
@@ -140,7 +156,7 @@ function CategoryCountBadges({
   const activeCounts = CATEGORY_ORDER.filter((category) => counts[category] > 0);
 
   if (activeCounts.length === 0) {
-    return <span className="text-sm text-muted-foreground">ไม่มีรายการ</span>;
+    return <span className="text-sm text-muted-foreground">ไม่มีจำหน่าย</span>;
   }
 
   return (
@@ -181,7 +197,7 @@ function MobileSummaryRow({
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-base font-semibold">{row.company.name}</div>
+            <div className="truncate text-base font-semibold">{thaiToArabicNumerals(row.company.name)}</div>
             <div className="text-xs text-muted-foreground">
               {row.row?.reporterName ? (
                 <span>
@@ -201,7 +217,7 @@ function MobileSummaryRow({
                 : "shrink-0 border-warning/40 text-warning"
             }
           >
-            {row.row ? "✓ ส่งแล้ว" : "รอส่ง"}
+            {row.row ? "ส่งยอดแล้ว" : "รอส่ง"}
           </Badge>
         </div>
 
@@ -225,7 +241,7 @@ function MobileSummaryRow({
           {row.row ? (
             <CategoryCountBadges counts={row.categoryCounts} />
           ) : (
-            <span className="text-sm text-muted-foreground">ยังไม่มีรายการ</span>
+            <span className="text-sm text-muted-foreground">ยังไม่ได้ส่งยอด</span>
           )}
         </div>
 
@@ -372,7 +388,6 @@ function AdminDashboard() {
       qc.invalidateQueries({ queryKey: ["admin-summary"] });
       qc.invalidateQueries({ queryKey: ["report-export"] });
       qc.invalidateQueries({ queryKey: ["report"] });
-      qc.invalidateQueries({ queryKey: ["other-options"] });
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error, "ล้างข้อมูลหมวดไม่สำเร็จ")),
   });
@@ -414,7 +429,21 @@ function AdminDashboard() {
   const warningRows = rows.filter((row) => row.warnings.length > 0);
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-4 sm:py-6">
+    <main
+      className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-4 sm:py-6 relative"
+      style={{
+        backgroundImage: "url(/dragon-background.png)",
+        backgroundSize: "contain",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+      <div
+        className="fixed inset-0 opacity-40 pointer-events-none"
+        style={{ background: "oklch(0.13 0.03 84)" }}
+      />
+      <div className="relative z-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div>
@@ -550,7 +579,7 @@ function AdminDashboard() {
                 <div className="flex flex-wrap gap-2">
                   {missingRows.map((row) => (
                     <Badge key={row.company.id} variant="secondary">
-                      {row.company.name}
+                      {thaiToArabicNumerals(row.company.name)}
                     </Badge>
                   ))}
                 </div>
@@ -707,7 +736,7 @@ function AdminDashboard() {
                   }`}
                   style={{ "--i": index } as React.CSSProperties}
                 >
-                  <TableCell className="font-medium">{row.company.name}</TableCell>
+                  <TableCell className="font-medium">{thaiToArabicNumerals(row.company.name)}</TableCell>
                   <TableCell>
                     {row.row?.reporterName ? (
                       <span>
@@ -736,7 +765,7 @@ function AdminDashboard() {
                   <TableCell>
                     {row.row ? (
                       <Badge className="border-success/30 bg-success/15 text-success hover:bg-success/20">
-                        ✓ ส่งแล้ว
+                        ส่งยอดแล้ว
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="border-warning/40 text-warning">
@@ -810,6 +839,7 @@ function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </main>
   );
 }

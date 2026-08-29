@@ -1,9 +1,9 @@
-import type { DispatchCategory, Entry } from "@/lib/thai";
+import { REPORT_ROW_META_SUBCATEGORY, isReportRowMeta, type DispatchCategory, type Entry } from "@/lib/thai";
 
 export const DEFAULT_REPORT_TIME = "05.45";
 
 const ROW_ORDER_STEP = 10000;
-const ROW_META_SUBCATEGORY = "__report_row_meta__";
+const ROW_META_SUBCATEGORY = REPORT_ROW_META_SUBCATEGORY;
 const ROW_META_ORDER_BASE = -1000000;
 
 export type StoredDispatchEntry = Entry & {
@@ -13,6 +13,7 @@ export type StoredDispatchEntry = Entry & {
 
 export type StoredDailyReport = {
   id: string;
+  report_date?: string | null;
   report_time?: string | null;
   reporter_name?: string | null;
   reporter_position?: string | null;
@@ -57,7 +58,7 @@ export function isValidReportTime(value: string | null | undefined): boolean {
 }
 
 export function isReportRowMetaEntry(entry: Pick<Entry, "category" | "subcategory">): boolean {
-  return entry.category === "other" && entry.subcategory === ROW_META_SUBCATEGORY;
+  return isReportRowMeta(entry);
 }
 
 function localDisplayOrder(entry: StoredDispatchEntry): number {

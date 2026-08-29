@@ -270,7 +270,6 @@ function Settings() {
       qc.invalidateQueries({ queryKey: ["admin-summary"] });
       qc.invalidateQueries({ queryKey: ["report-export"] });
       qc.invalidateQueries({ queryKey: ["report"] });
-      qc.invalidateQueries({ queryKey: ["other-options"] });
     },
     onError: (error: unknown) => toast.error(getErrorMessage(error, "ล้างข้อมูลไม่สำเร็จ")),
   });

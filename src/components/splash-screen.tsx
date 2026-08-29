@@ -55,10 +55,22 @@ export function SplashScreen() {
       className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden select-none ${
         phase === "exiting" ? "splash-exit" : ""
       }`}
-      style={{ background: "oklch(0.13 0.03 84)" }}
+      style={{
+        backgroundImage: "url(/dragon-background.png)",
+        backgroundSize: "contain",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+      }}
     >
+      {/* Dark overlay for readability */}
+      <div
+        className="absolute inset-0 opacity-40"
+        style={{ background: "oklch(0.13 0.03 84)" }}
+      />
+
       {/* Animated tiger stripe background */}
-      <div className="tiger-stripes-animated absolute inset-0 opacity-25" />
+      <div className="tiger-stripes-animated absolute inset-0 opacity-15" />
 
       {/* Radial glow behind the logo */}
       <div
@@ -73,9 +85,9 @@ export function SplashScreen() {
 
       {/* Center content */}
       <div className="relative flex flex-col items-center gap-5">
-        {/* Tiger logo */}
+        {/* Dragon logo */}
         <img
-          src="/tiger_logo.png"
+          src="/dragon_logo.png"
           alt=""
           className="logo-glow-in h-20 w-20 rounded-full object-contain"
           style={{
@@ -99,11 +111,11 @@ export function SplashScreen() {
               {
                 "--i": 0,
                 animationDelay: "420ms",
-                color: "oklch(0.78 0.15 84 / 80%)",
+                color: "oklch(0.65 0.2 145 / 90%)",
               } as React.CSSProperties
             }
           >
-            กองร้อยที่ ๒ ฝ่ายปกครอง ๑
+            กองร้อยที่ ๔ ฝ่ายปกครอง ๑
           </p>
         </div>
 

@@ -61,8 +61,8 @@ function AdminLogin() {
           <CardHeader className="flex flex-col items-center p-4 text-center sm:p-6">
             <div className="mb-2">
               <img
-                src="/tiger_logo.png"
-                alt="Tiger Logo"
+                src="/dragon_logo.png"
+                alt="Dragon Logo"
                 className="float-soft h-16 w-16 rounded-full border-2 border-primary/30 object-contain shadow-sm ring-4 ring-primary/10"
               />
             </div>

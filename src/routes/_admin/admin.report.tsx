@@ -33,18 +33,18 @@ type ReporterFields = {
 };
 
 const COMPANY_REPORT_HEADER =
-  "กองร้อยที่ ๒ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๒)";
+  "กองร้อยที่ ๔ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๔)";
 
 const DEFAULT_REPORTER_FIELDS: Record<ReportTemplate, ReporterFields> = {
   strength: {
     selectedReporter: "",
-    reporterName: "นรต.ธัชชัย อ่อนแก้ว",
-    reporterPosition: "ผู้ช่วย ผบ.มว. ร้อย ๒ ปค.๑ บก.ปค.",
+    reporterName: "นรต.ภูริจักษ์ มาโชติ",
+    reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๔ ปค.๑ บก.ปค.",
   },
   stretchExercise: {
     selectedReporter: "",
-    reporterName: "นรต.ธนพล นราพันธ์",
-    reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๒ ปค.๑ บก.ปค.",
+    reporterName: "นรต.อังกูร เทพหัสดินทร์ ณ อยุธยา",
+    reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๔ ปค.๑ บก.ปค.",
   },
 };
 

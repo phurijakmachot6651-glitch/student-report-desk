@@ -1,3 +1,5 @@
+import studentsData from "@/data/students.json";
+
 // Thai numeral & report formatting helpers
 
 const TH_DIGITS = ["๐", "๑", "๒", "๓", "๔", "๕", "๖", "๗", "๘", "๙"];
@@ -52,7 +54,6 @@ export const CATEGORY_ORDER: DispatchCategory[] = [
   "leave",
   "absent",
   "official",
-  "suspended",
   "other",
 ];
 
@@ -99,33 +100,70 @@ export type StrengthSummary = {
   items: DispatchSummaryItem[];
 };
 
+/**
+ * subcategory ที่ใช้เก็บ meta ของแถวรายงาน (ไม่ใช่รายการจำหน่ายจริง)
+ * ดู encodeReportRows/decodeReportRows ใน report-rows.ts
+ */
+export const REPORT_ROW_META_SUBCATEGORY = "__report_row_meta__";
+
+export function isReportRowMeta(entry: Pick<Entry, "category" | "subcategory">): boolean {
+  return entry.category === "other" && entry.subcategory === REPORT_ROW_META_SUBCATEGORY;
+}
+
 export function normalizeOtherSubcategory(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function formatDispatchEntryDetail(entry: Entry): string {
-  const parts = [entry.cadet_name, entry.reason, entry.location]
-    .map((part) => part.trim())
+/** แยกรายชื่อที่คั่นด้วย comma ออกเป็นรายชื่อเดี่ยว */
+export function splitCadetNames(value: string | null | undefined): string[] {
+  return (value || "")
+    .split(",")
+    .map((name) => name.trim())
     .filter(Boolean);
+}
 
-  return parts.join(", ");
+function formatDispatchEntryDetail(entry: Entry): string {
+  const cadetNames = splitCadetNames(entry.cadet_name).map(formatCadetForSummary).join(", ");
+
+  return [cadetNames, entry.reason.trim(), entry.location.trim()].filter(Boolean).join(", ");
 }
 
 export function cleanReportEntries(entries: Entry[]): Entry[] {
   return entries
-    .map((entry) => ({
-      ...entry,
-      cadet_name: entry.cadet_name.trim(),
-      reason: entry.reason.trim(),
-      location: entry.location.trim(),
-      subcategory: normalizeOtherSubcategory(entry.subcategory),
-      count: Number(entry.count) || 0,
-    }))
+    .map((entry) => {
+      const cadetName = entry.cadet_name.trim();
+      const names = splitCadetNames(cadetName);
+
+      return {
+        ...entry,
+        cadet_name: cadetName,
+        reason: entry.reason.trim(),
+        location: entry.location.trim(),
+        subcategory:
+          entry.category === "other"
+            ? normalizeOtherSubcategory(entry.subcategory)
+            : entry.subcategory.trim(),
+        // ถ้าระบุรายชื่อไว้ จำนวนต้องตรงกับจำนวนรายชื่อเสมอ
+        count: names.length > 0 ? names.length : Number(entry.count) || 0,
+      };
+    })
     .filter((entry) => {
+      // meta ของแถวรายงาน ไม่นับเป็นรายการจำหน่าย
+      if (isReportRowMeta(entry)) return false;
+
       if (entry.category === "other") {
+        // จำหน่ายแบบระบุรายชื่อ (นับหัวจากรายชื่อ) หรือแบบระบุหัวข้อ + จำนวน
+        if (entry.cadet_name.length > 0) return true;
         return entry.subcategory.length > 0 && entry.count > 0;
       }
-      return [entry.cadet_name, entry.reason, entry.location].some(Boolean);
+      // กรองเฉพาะรายการที่มีชื่อนักเรียน และต้องมีสาเหตุ + สถานที่ด้วย
+      const hasName = entry.cadet_name.length > 0;
+      if (!hasName) return false;
+
+      const hasReason = entry.reason.length > 0;
+      const hasLocation = entry.location.length > 0;
+
+      return hasReason && hasLocation;
     });
 }
 
@@ -133,8 +171,13 @@ export function emptyCategoryCounts(): CategoryCounts {
   return Object.fromEntries(CATEGORY_ORDER.map((category) => [category, 0])) as CategoryCounts;
 }
 
-export function countDispatchEntry(entry: Pick<Entry, "category" | "count">): number {
-  return entry.category === "other" ? Number(entry.count) || 0 : 1;
+export function countDispatchEntry(entry: Pick<Entry, "category" | "count" | "cadet_name">): number {
+  // นับจำนวนนักเรียนจากรายชื่อที่คั่นด้วย comma
+  const names = splitCadetNames(entry.cadet_name);
+  if (names.length > 0) return names.length;
+
+  // ไม่ได้ระบุรายชื่อ: "อื่น ๆ" ใช้จำนวนที่กรอกไว้ได้
+  return entry.category === "other" ? Number(entry.count) || 0 : 0;
 }
 
 export function summarizeDispatchEntries(entries: Entry[], fullStrength: number): StrengthSummary {
@@ -159,11 +202,13 @@ export function summarizeDispatchEntries(entries: Entry[], fullStrength: number)
     categoryCounts[entry.category] += count;
     item.count += count;
 
-    if (entry.category !== "other") {
-      const detail = formatDispatchEntryDetail(entry);
-      if (detail) {
-        item.details.push(detail);
-      }
+    // แสดงรายละเอียดรายชื่อที่จำหน่ายทุกหมวด รวม "อื่น ๆ"
+    const detail = formatDispatchEntryDetail(entry);
+    if (detail) {
+      item.details.push(detail);
+    } else if (entry.cadet_name.trim()) {
+      // ถ้าไม่มี detail แต่มีชื่อ ให้แสดงชื่อนักเรียนอย่างน้อย
+      item.details.push(entry.cadet_name.trim());
     }
 
     itemsByKey.set(key, item);
@@ -185,11 +230,124 @@ export function summarizeDispatchEntries(entries: Entry[], fullStrength: number)
   };
 }
 
+type OtherGroup = { label: string; count: number };
+
+/** รวมรายการ "อื่น ๆ" แบบหัวข้อ + จำนวน (ข้อมูลเก่าที่ไม่ได้ระบุรายชื่อ) ตามหัวข้อ */
+function groupOtherEntries(list: Entry[]): OtherGroup[] {
+  const grouped = new Map<string, OtherGroup>();
+
+  list.forEach((entry) => {
+    const label = normalizeOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other;
+    const group = grouped.get(label) || { label, count: 0 };
+
+    group.count += countDispatchEntry(entry);
+    grouped.set(label, group);
+  });
+
+  return Array.from(grouped.values());
+}
+
 function countFor(cat: DispatchCategory, entries: Entry[]): number {
-  if (cat === "other") {
-    return entries.filter((e) => e.category === "other").reduce((s, e) => s + (e.count || 0), 0);
+  return entries
+    .filter((e) => e.category === cat)
+    .reduce((sum, entry) => sum + countDispatchEntry(entry), 0);
+}
+
+const studentsByDisplayName = new Map(
+  studentsData.map((student) => [normalizeCadetLookupValue(student.display_name), student]),
+);
+const studentsByFullName = new Map(
+  studentsData.map((student) => [
+    normalizeCadetLookupValue([student.name, student.surname].filter(Boolean).join(" ")),
+    student,
+  ]),
+);
+
+function normalizeCadetLookupValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function removeCadetNameMetadata(value: string): string {
+  return normalizeCadetLookupValue(value)
+    .replace(/^นรต\.\s*/u, "")
+    .replace(/\s+เลขที่\s+[๐-๙\d]+\s*$/u, "")
+    .trim();
+}
+
+function firstSurnameConsonant(surname: string): string {
+  return surname.match(/[ก-ฮ]/u)?.[0] || surname.match(/[A-Za-z]/u)?.[0] || "";
+}
+
+function formatCadetForSummary(value: string): string {
+  const normalizedValue = normalizeCadetLookupValue(value);
+  const plainName = removeCadetNameMetadata(normalizedValue);
+  const student =
+    studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
+
+  if (student) {
+    const surnameInitial = firstSurnameConsonant(student.surname);
+    const abbreviatedName = `${student.name}${surnameInitial ? ` ${surnameInitial}.` : ""}`;
+    return `${abbreviatedName} เลขที่ ${student.number}`;
   }
-  return entries.filter((e) => e.category === cat).length;
+
+  const number = normalizedValue.match(/\s+เลขที่\s+([๐-๙\d]+)\s*$/u)?.[1] || "-";
+  const nameParts = plainName.split(/\s+/).filter(Boolean);
+  const surname = nameParts.length > 1 ? nameParts.pop() || "" : "";
+  const givenName = nameParts.join(" ") || plainName;
+  const surnameInitial = firstSurnameConsonant(surname);
+  const abbreviatedName = `${givenName}${surnameInitial ? ` ${surnameInitial}.` : ""}`;
+
+  return `${abbreviatedName} เลขที่ ${number}`;
+}
+
+function formatCadetForReport(value: string): string {
+  const normalizedValue = normalizeCadetLookupValue(value);
+  const plainName = removeCadetNameMetadata(normalizedValue);
+  const student =
+    studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
+
+  if (student) {
+    const surnameInitial = firstSurnameConsonant(student.surname);
+    const abbreviatedName = `${student.name}${surnameInitial ? ` ${surnameInitial}.` : ""}`;
+    return `${abbreviatedName} มว.${toThaiNumerals(student.squad)}`;
+  }
+
+  const nameParts = plainName.split(/\s+/).filter(Boolean);
+  const surname = nameParts.length > 1 ? nameParts.pop() || "" : "";
+  const givenName = nameParts.join(" ") || plainName;
+  const surnameInitial = firstSurnameConsonant(surname);
+  const abbreviatedName = `${givenName}${surnameInitial ? ` ${surnameInitial}.` : ""}`;
+
+  return `${abbreviatedName} มว.-`;
+}
+
+const REPORT_DETAIL_INDENT = "\t";
+
+function detailedCategoryLines(list: Entry[], includeCadetNames = true): string[] {
+  const groups = new Map<
+    string,
+    { reason: string; location: string; cadetNames: string[] }
+  >();
+
+  list.forEach((entry) => {
+    const reason = entry.reason.trim();
+    const location = entry.location.trim();
+    const key = `${reason}\u0000${location}`;
+    const group = groups.get(key) || { reason, location, cadetNames: [] };
+
+    group.cadetNames.push(...splitCadetNames(entry.cadet_name));
+    groups.set(key, group);
+  });
+
+  return Array.from(groups.values()).flatMap((group, index) => [
+    ...(index > 0 ? [""] : []),
+    `${REPORT_DETAIL_INDENT}> ${group.reason}, ${toThaiNumerals(group.cadetNames.length)} นาย [${group.location}]`,
+    ...(includeCadetNames
+      ? group.cadetNames.map(
+          (cadetName) => `${REPORT_DETAIL_INDENT}  - ${formatCadetForReport(cadetName)}`,
+        )
+      : []),
+  ]);
 }
 
 function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
@@ -198,23 +356,34 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
   const label = CATEGORY_LABELS[cat];
   const head = total > 0 ? ` 📍 ${label} ${toThaiNumerals(total)} นาย` : ` 📍 ${label} - นาย`;
 
+  if (cat === "sick" || cat === "leave" || cat === "official") {
+    const detailLines = detailedCategoryLines(list);
+    return [head, ...detailLines, ...(detailLines.length > 0 ? [""] : [])].join("\n");
+  }
+
   if (cat === "other") {
-    const grouped = list.reduce(
-      (acc, e) => {
-        acc[e.subcategory] = (acc[e.subcategory] || 0) + (e.count || 0);
-        return acc;
-      },
-      {} as Record<string, number>,
+    // รายการที่มีรายชื่อ สรุปตามสาเหตุและสถานที่โดยไม่แสดงรายชื่อย่อย
+    const named = list.filter((e) => splitCadetNames(e.cadet_name).length > 0);
+    const namedLines = detailedCategoryLines(named, false);
+
+    // ข้อมูลเก่าที่บันทึกแบบหัวข้อ + จำนวน ยังรวมตามหัวข้อ
+    const legacyLines = groupOtherEntries(
+      list.filter((e) => splitCadetNames(e.cadet_name).length === 0),
+    ).map(
+      ({ label, count }) =>
+        `${REPORT_DETAIL_INDENT}- ${label}                  ${toThaiNumerals(count)} นาย`,
     );
 
-    const lines = Object.entries(grouped).map(
-      ([key, count]) => `- ${key}                  ${toThaiNumerals(count)} นาย`,
-    );
-    return [head, ...lines].join("\n");
+    return [
+      head,
+      ...namedLines,
+      ...(namedLines.length > 0 && legacyLines.length > 0 ? [""] : []),
+      ...legacyLines,
+    ].join("\n");
   }
   const lines = list.map((e) => {
     const parts = [e.cadet_name, e.reason, e.location].filter(Boolean);
-    return `- ${parts.join(" ,")}`;
+    return `${REPORT_DETAIL_INDENT}- ${parts.join(" ,")}`;
   });
   return [head, ...lines].join("\n");
 }
@@ -233,21 +402,21 @@ export function buildReportText(input: ReportInput): string {
     "",
     `กระผม ${input.reporterName || "-"}`,
     `${input.reporterPosition || "-"}`,
-    `ขออนุญาตรายงานยอดกำลังพลของนักเรียนนายร้อยตำรวจชั้นปีที่ ๒ รุ่นที่ ๘๒ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
+    `ขออนุญาตรายงานยอดกำลังพลของกองร้อยที่ ๔ รุ่นที่ ๘๐ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
     "",
     `📌 ยอดเต็ม                   ${toThaiNumerals(input.fullStrength)}  นาย`,
-    `📌 จำหน่ายรวม                  ${toThaiNumerals(totalDispatched)}  นาย`,
+    `📌 จำหน่ายรวม                   ${totalDispatched > 0 ? toThaiNumerals(totalDispatched) : "-"}  นาย`,
     `📌 คงเหลือ                    ${toThaiNumerals(remaining)}  นาย`,
     "",
   ].join("\n");
 
   const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n");
 
-  return `${header}\n${body}\n\nจึงเรียนมาเพื่อโปรดทราบ\n`;
+  return toThaiNumerals(`${header}\n${body}\n`);
 }
 
 export function buildStretchExerciseReportText(input: StretchExerciseReportInput): string {
-  return [
+  return toThaiNumerals([
     `${input.companyName}`,
     "",
     "**************************",
@@ -255,13 +424,13 @@ export function buildStretchExerciseReportText(input: StretchExerciseReportInput
     "เรียน ผู้บังคับบัญชา",
     "",
     `กระผม ${input.reporterName || "-"}`,
-    `${input.reporterPosition || "-"} ขออนุญาตรายงานภาพการยืดเหยียดและกายบริหารของกองร้อยที่ ๒ รุ่นที่ ๘๒ ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
+    `${input.reporterPosition || "-"} ขออนุญาตรายงานภาพการยืดเหยียดและกายบริหารของกองร้อยที่ ๔ รุ่นที่ ๘๐ ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
     "",
     "-การปฎิบัติเป็นไปด้วยความเรียบร้อย",
     "",
     "จึงเรียนมาเพื่อโปรดทราบ",
     "",
-  ].join("\n");
+  ].join("\n"));
 }
 
 function markdownCategoryBlock(cat: DispatchCategory, entries: Entry[]): string {
@@ -271,9 +440,17 @@ function markdownCategoryBlock(cat: DispatchCategory, entries: Entry[]): string 
   const lines = [`### ${label} ${total > 0 ? toThaiNumerals(total) : "-"} นาย`];
 
   if (cat === "other") {
-    list.forEach((entry) => {
-      lines.push(`- ${entry.subcategory}: ${toThaiNumerals(entry.count)} นาย`);
-    });
+    list
+      .filter((entry) => splitCadetNames(entry.cadet_name).length > 0)
+      .forEach((entry) => {
+        const parts = [entry.cadet_name, entry.reason, entry.location].filter(Boolean);
+        lines.push(`- ${parts.join(", ")}`);
+      });
+
+    groupOtherEntries(
+      list.filter((entry) => splitCadetNames(entry.cadet_name).length === 0),
+    ).forEach(({ label, count }) => lines.push(`- ${label}: ${toThaiNumerals(count)} นาย`));
+
     return lines.join("\n");
   }
 
@@ -298,7 +475,7 @@ export function buildReportMarkdown(input: ReportInput): string {
     `**ผู้รายงาน:** ${input.reporterName || "-"}`,
     `**ตำแหน่ง:** ${input.reporterPosition || "-"}`,
     "",
-    `ขออนุญาตรายงานยอดกำลังพลของนักเรียนนายร้อยตำรวจชั้นปีที่ ๒ รุ่นที่ ๘๒ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
+    `ขออนุญาตรายงานยอดกำลังพลของกองร้อยที่ ๔ รุ่นที่ ๘๐ ประจำ${formatThaiDate(input.reportDate)} เวลา ${toThaiNumerals(input.reportTime || "-")} น. ดังนี้`,
     "",
     `- **ยอดเต็ม:** ${toThaiNumerals(input.fullStrength)} นาย`,
     `- **จำหน่ายรวม:** ${toThaiNumerals(totalDispatched)} นาย`,

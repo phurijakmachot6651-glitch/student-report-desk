@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LogIn, Users, CheckCircle2 } from "lucide-react";
 import { summarizeDispatchEntries, todayISO, type Entry } from "@/lib/thai";
+import { thaiToArabicNumerals } from "@/lib/thai-numerals";
 import {
   DEFAULT_REPORT_TIME,
   getReportRowFromReports,
@@ -20,6 +21,7 @@ import {
   REPORT_TIME_SETTINGS_QUERY_KEY,
   REPORT_TIME_SETTINGS_QUERY_OPTIONS,
 } from "@/lib/report-settings";
+import { isReportTimeApproaching } from "@/lib/report-time-alert";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,6 +46,15 @@ function toThaiDate(isoDate: string) {
 function Home() {
   const reportDate = todayISO();
   const [selectedReportTime, setSelectedReportTime] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const refreshCurrentTime = () => setCurrentTime(new Date());
+    refreshCurrentTime();
+    const timer = window.setInterval(refreshCurrentTime, 15_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const { data: reportTimeSettings, isLoading: isLoadingReportTimes } = useQuery({
     queryKey: REPORT_TIME_SETTINGS_QUERY_KEY,
@@ -101,27 +112,26 @@ function Home() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      {/* Tiger backdrop */}
-      <div className="pointer-events-none fixed inset-0 select-none">
+      {/* Dragon backdrop */}
+      <div className="pointer-events-none fixed inset-0 select-none overflow-hidden">
         <img
-          src="/tiger-bg.jpg"
+          src="/dragon-background.png"
           alt=""
-          className="h-full w-full object-cover opacity-[0.07] dark:opacity-[0.05]"
+          className="h-full w-auto min-w-full object-contain opacity-[0.15] dark:opacity-[0.12]"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background/60 to-background" />
-        <div className="tiger-stripes absolute inset-0 opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background/70 to-background" />
       </div>
 
       <header className="sticky top-0 z-20 border-b border-primary/15 bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-3 py-3 sm:px-4 sm:py-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <img
-              src="/tiger_logo.png"
-              alt="Tiger Logo"
+              src="/dragon_logo.png"
+              alt="Dragon Logo"
               className="float-soft h-9 w-9 shrink-0 rounded-full border border-primary/30 object-contain shadow-sm ring-2 ring-primary/10"
             />
             <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">
-              ยอดกำลังพล นรต. กองร้อยที่ ๒
+              ยอดกำลังพล นรต. กองร้อยที่ ๔
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -197,9 +207,10 @@ function Home() {
             )}
 
             {/* Report time selector */}
-            <div className="-mx-3 flex snap-x items-center gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
+            <div className="-mx-3 flex snap-x items-center gap-4 overflow-x-auto px-3 py-2 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
               {reportTimes.map((time) => {
                 const selected = time === reportTime;
+                const alarm = currentTime ? isReportTimeApproaching(time, currentTime) : false;
 
                 return (
                   <Button
@@ -207,8 +218,12 @@ function Home() {
                     type="button"
                     variant={selected ? "default" : "outline"}
                     onClick={() => setSelectedReportTime(time)}
+                    aria-current={selected ? "true" : undefined}
+                    aria-label={alarm ? `เวลา ${time} ใกล้ถึงเวลาส่งยอด` : `เวลา ${time}`}
+                    data-report-time={time}
+                    data-alarm={alarm ? "true" : "false"}
                     className={`h-10 min-w-24 shrink-0 snap-start rounded-full backdrop-blur-sm ${
-                      selected ? "glow-pulse" : ""
+                      alarm ? "report-time-alarm" : selected ? "report-time-active" : ""
                     }`}
                   >
                     เวลา {time}
@@ -260,7 +275,7 @@ function Home() {
                             >
                               <Users className="h-5 w-5" />
                             </span>
-                            <span className="truncate">{company.name}</span>
+                            <span className="truncate">{thaiToArabicNumerals(company.name)}</span>
                           </div>
                           <Badge
                             variant={hasReport ? "default" : "secondary"}
@@ -270,7 +285,7 @@ function Home() {
                                 : ""
                             }`}
                           >
-                            {hasReport ? "✓ ส่งแล้ว" : "รอส่ง"}
+                            {hasReport ? "ส่งยอดแล้ว" : "รอส่ง"}
                           </Badge>
                         </CardTitle>
                       </CardHeader>
@@ -340,7 +355,9 @@ function Home() {
                               </div>
                             ))
                           ) : (
-                            <div className="text-muted-foreground">ไม่มีรายการจำหน่าย</div>
+                            <div className="text-muted-foreground">
+                              {hasReport ? "ไม่มีจำหน่าย" : "ยังไม่ได้ส่งยอด"}
+                            </div>
                           )}
                         </div>
                       </CardContent>

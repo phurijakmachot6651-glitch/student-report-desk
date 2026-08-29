@@ -45,8 +45,8 @@ function AdminLayout() {
             <div className="flex items-center justify-between gap-3">
               <Link to="/admin" className="flex min-w-0 items-center gap-2 font-bold">
                 <img
-                  src="/tiger_logo.png"
-                  alt="Tiger Logo"
+                  src="/dragon_logo.png"
+                  alt="Dragon Logo"
                   className="h-8 w-8 shrink-0 rounded-full border border-primary/30 object-contain ring-2 ring-primary/10"
                 />
                 <span className="gold-text truncate text-lg">แอดมิน</span>
