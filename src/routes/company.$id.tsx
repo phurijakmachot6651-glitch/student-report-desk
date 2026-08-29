@@ -1,20 +1,22 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Plus, Trash2, ArrowLeft, Users, MinusCircle, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Users, MinusCircle, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import studentsData from "@/data/students.json";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   cleanReportEntries,
-  normalizeOtherSubcategory,
+  countDispatchEntry,
+  splitCadetNames,
   summarizeDispatchEntries,
   todayISO,
   type DispatchCategory,
@@ -24,7 +26,6 @@ import {
   DEFAULT_REPORT_TIME,
   decodeReportRows,
   encodeReportRows,
-  getReportRow,
   getReportRowFromReports,
   isValidReportTime,
   normalizeReportTime,
@@ -38,6 +39,17 @@ import {
   REPORT_TIME_SETTINGS_QUERY_KEY,
   REPORT_TIME_SETTINGS_QUERY_OPTIONS,
 } from "@/lib/report-settings";
+import {
+  createDispatchPeriod,
+  getDispatchPeriodKey,
+  hasDispatchPeriod,
+  isDispatchPeriodActiveAt,
+  parseDispatchPeriod,
+  reportDateTimeToTimestamp,
+  serializeDispatchPeriod,
+  validateDispatchPeriod,
+  type DispatchDateTimeParts,
+} from "@/lib/dispatch-period";
 
 export const Route = createFileRoute("/company/$id")({
   validateSearch: (search): { date?: string; time?: string } => ({
@@ -48,16 +60,121 @@ export const Route = createFileRoute("/company/$id")({
 });
 
 type EntryRow = Entry & { id?: string; _local?: string };
-type OtherOption = {
-  name: string;
-  count: number;
-  companyNames: string[];
-};
-type RelatedCompany = { name?: string | null } | { name?: string | null }[] | null;
-type ReportWithCompany = StoredDailyReport & {
-  company_id: string;
-  companies?: RelatedCompany;
-};
+
+const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+
+function DispatchDateTimeInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: DispatchDateTimeParts;
+  onChange: (value: DispatchDateTimeParts) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="grid grid-cols-[minmax(0,1fr)_3.75rem_3.75rem_auto] gap-1.5">
+        <Input
+          type="date"
+          aria-label={`${label} วันที่`}
+          className="min-w-0"
+          value={value.date}
+          onChange={(event) => onChange({ ...value, date: event.target.value })}
+        />
+        <select
+          aria-label={`${label} ชั่วโมง`}
+          className="flex h-10 w-full rounded-md border border-input bg-transparent px-1 py-1 text-center text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={value.hour}
+          onChange={(event) => onChange({ ...value, hour: event.target.value })}
+        >
+          <option value="">--</option>
+          {HOURS.map((hour) => (
+            <option key={hour} value={hour}>
+              {hour}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={`${label} นาที`}
+          className="flex h-10 w-full rounded-md border border-input bg-transparent px-1 py-1 text-center text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={value.minute}
+          onChange={(event) => onChange({ ...value, minute: event.target.value })}
+        >
+          <option value="">--</option>
+          {MINUTES.map((minute) => (
+            <option key={minute} value={minute}>
+              {minute}
+            </option>
+          ))}
+        </select>
+        <span className="flex items-center text-sm text-muted-foreground">น.</span>
+      </div>
+    </div>
+  );
+}
+
+function hasPeriodInput(entry: Entry): boolean {
+  if (!hasDispatchPeriod(entry.category)) return false;
+
+  const period = parseDispatchPeriod(entry.subcategory);
+  return [period.start, period.end].some((parts) =>
+    Boolean(parts.date || parts.hour || parts.minute),
+  );
+}
+
+function toEntryRow(entry: StoredDispatchEntry): EntryRow {
+  return {
+    id: entry.id,
+    category: entry.category,
+    cadet_name: entry.cadet_name,
+    reason: entry.reason,
+    location: entry.location,
+    subcategory: entry.subcategory,
+    count: entry.count,
+  };
+}
+
+function getActiveCarriedEntries(
+  reports: StoredDailyReport[],
+  reportDate: string,
+  reportTime: string,
+): StoredDispatchEntry[] {
+  const targetTimestamp = reportDateTimeToTimestamp(reportDate, reportTime);
+  if (!targetTimestamp) return [];
+
+  const latestEntries = new Map<
+    string,
+    { timestamp: string; entry: StoredDispatchEntry }
+  >();
+
+  reports.forEach((storedReport) => {
+    if (!storedReport.report_date) return;
+
+    decodeReportRows(storedReport).forEach((row) => {
+      const rowTimestamp = reportDateTimeToTimestamp(storedReport.report_date || "", row.reportTime);
+      if (!rowTimestamp || rowTimestamp >= targetTimestamp) return;
+
+      row.entries.forEach((entry) => {
+        if (!hasDispatchPeriod(entry.category)) return;
+
+        const key = getDispatchPeriodKey(entry);
+        const previous = latestEntries.get(key);
+        if (!previous || previous.timestamp <= rowTimestamp) {
+          latestEntries.set(key, { timestamp: rowTimestamp, entry });
+        }
+      });
+    });
+  });
+
+  return Array.from(latestEntries.values())
+    .map(({ entry }) => entry)
+    .filter((entry) =>
+      isDispatchPeriodActiveAt(parseDispatchPeriod(entry.subcategory), targetTimestamp),
+    );
+}
 
 function CompanyPage() {
   const { id } = useParams({ from: "/company/$id" });
@@ -70,6 +187,10 @@ function CompanyPage() {
     isValidReportTime(search.time) ? normalizeReportTime(search.time) : DEFAULT_REPORT_TIME,
   );
   const [entries, setEntries] = useState<EntryRow[]>([]);
+  const [showReporterStudentList, setShowReporterStudentList] = useState(false);
+  const [reporterSearchQuery, setReporterSearchQuery] = useState("");
+  const [showStudentList, setShowStudentList] = useState<Record<number, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState<Record<number, string>>({});
   const selectedReportTime = normalizeReportTime(reportTime);
 
   const { data: reportTimeSettings } = useQuery({
@@ -99,13 +220,20 @@ function CompanyPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("companies")
-        .select("id,name,full_strength")
+        .select("id,name,full_strength,display_order")
         .eq("id", id)
         .single();
       if (error) throw error;
       return data;
     },
   });
+
+  // Filter students by squad based on company display_order
+  const filteredStudents = useMemo(() => {
+    if (!company?.display_order) return studentsData;
+    return studentsData.filter(student => student.squad === String(company.display_order));
+  }, [company?.display_order]);
+
   const strengthSummary = summarizeDispatchEntries(entries, company?.full_strength || 0);
 
   const { data: reports = [] } = useQuery({
@@ -114,88 +242,52 @@ function CompanyPage() {
       const { data, error } = await supabase
         .from("daily_reports")
         .select(
-          "id,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)",
+          "id,report_date,reporter_name,reporter_position,report_time,dispatch_entries(id,category,cadet_name,reason,location,subcategory,count,display_order)",
         )
         .eq("company_id", id)
-        .eq("report_date", date);
+        .lte("report_date", date)
+        .order("report_date", { ascending: true });
       if (error) throw error;
       return data || [];
     },
   });
   const companyReports = reports as StoredDailyReport[];
-  const currentReportMatch = useMemo(
-    () => getReportRowFromReports(companyReports, selectedReportTime),
-    [companyReports, selectedReportTime],
+  const currentDateReports = useMemo(
+    () => companyReports.filter((storedReport) => storedReport.report_date === date),
+    [companyReports, date],
   );
-  const report = currentReportMatch?.report || companyReports[0] || null;
-
-  const { data: otherOptions = [] } = useQuery({
-    queryKey: ["other-options", id, date, selectedReportTime],
-    queryFn: async (): Promise<OtherOption[]> => {
-      const { data, error } = await supabase
-        .from("daily_reports")
-        .select(
-          "id,report_time,reporter_name,reporter_position,company_id,companies(name),dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
-        )
-        .eq("report_date", date)
-        .neq("company_id", id);
-      if (error) throw error;
-
-      const grouped = new Map<string, OtherOption>();
-
-      ((data || []) as ReportWithCompany[]).forEach((dailyReport) => {
-        const relatedCompany = Array.isArray(dailyReport.companies)
-          ? dailyReport.companies[0]
-          : dailyReport.companies;
-        const companyName = relatedCompany?.name || "";
-        const row = getReportRow(dailyReport, selectedReportTime);
-        if (!row) return;
-
-        row.entries.forEach((entry) => {
-          if (entry.category !== "other") return;
-
-          const name = normalizeOtherSubcategory(entry.subcategory || "");
-          if (!name) return;
-
-          const count = Number(entry.count) || 0;
-          if (count <= 0) return;
-
-          const current = grouped.get(name) || { name, count: 0, companyNames: [] };
-          current.count += count;
-          if (companyName && !current.companyNames.includes(companyName)) {
-            current.companyNames.push(companyName);
-          }
-          grouped.set(name, current);
-        });
-      });
-
-      return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name, "th"));
-    },
-  });
+  const currentReportMatch = useMemo(
+    () => getReportRowFromReports(currentDateReports, selectedReportTime),
+    [currentDateReports, selectedReportTime],
+  );
+  const carriedEntries = useMemo(
+    () => getActiveCarriedEntries(companyReports, date, selectedReportTime),
+    [companyReports, date, selectedReportTime],
+  );
+  const report = currentReportMatch?.report || currentDateReports[0] || null;
 
   useEffect(() => {
     const row = currentReportMatch?.row || null;
+    const rowEntries = (row?.entries || []).map(toEntryRow);
+    const currentPeriodKeys = new Set(
+      rowEntries
+        .filter((entry) => hasDispatchPeriod(entry.category))
+        .map((entry) => getDispatchPeriodKey(entry)),
+    );
+    const activeEntries = carriedEntries
+      .filter((entry) => !currentPeriodKeys.has(getDispatchPeriodKey(entry)))
+      .map(toEntryRow);
 
     if (row) {
       setReporterName(row.reporterName || "");
       setReporterPosition(row.reporterPosition || "");
-      setEntries(
-        row.entries.map((entry: StoredDispatchEntry) => ({
-          id: entry.id,
-          category: entry.category,
-          cadet_name: entry.cadet_name,
-          reason: entry.reason,
-          location: entry.location,
-          subcategory: entry.subcategory,
-          count: entry.count,
-        })),
-      );
+      setEntries([...rowEntries, ...activeEntries]);
     } else {
       setReporterName("");
       setReporterPosition("");
-      setEntries([]);
+      setEntries(activeEntries);
     }
-  }, [date, currentReportMatch, selectedReportTime]);
+  }, [date, currentReportMatch, carriedEntries, selectedReportTime]);
 
   const addEntry = (category: DispatchCategory) => {
     setEntries((prev) => [
@@ -206,7 +298,9 @@ function CompanyPage() {
         cadet_name: "",
         reason: "",
         location: "",
-        subcategory: "",
+        subcategory: hasDispatchPeriod(category)
+          ? serializeDispatchPeriod(createDispatchPeriod(crypto.randomUUID()))
+          : "",
         count: 1,
       },
     ]);
@@ -216,19 +310,111 @@ function CompanyPage() {
     setEntries((prev) => prev.map((entry, i) => (i === idx ? { ...entry, ...patch } : entry)));
   };
 
+  const updateEntryPeriod = (
+    idx: number,
+    boundary: "start" | "end",
+    value: DispatchDateTimeParts,
+  ) => {
+    setEntries((prev) =>
+      prev.map((entry, entryIndex) => {
+        if (entryIndex !== idx) return entry;
+
+        const period = parseDispatchPeriod(entry.subcategory);
+        return {
+          ...entry,
+          subcategory: serializeDispatchPeriod({
+            ...period,
+            id: period.id || crypto.randomUUID(),
+            [boundary]: value,
+          }),
+        };
+      }),
+    );
+  };
+
   const removeEntry = (idx: number) => {
     setEntries((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const selectOtherSubcategory = (idx: number, subcategory: string) => {
-    updateEntry(idx, { subcategory, count: Math.max(1, entries[idx]?.count || 1) });
+  const selectReporter = (student: (typeof studentsData)[number]) => {
+    const fullName = [student.name, student.surname].filter(Boolean).join(" ");
+    setReporterName(`นรต.${fullName}`);
+    setReporterPosition(student.number);
+    setShowReporterStudentList(false);
+    setReporterSearchQuery("");
   };
 
   const validateReportRequiredFields = () => {
-    const missingFields = [];
+    const missingFields: string[] = [];
 
     if (!reporterName.trim()) missingFields.push("ชื่อผู้ควบคุมแถว");
     if (!reportTime.trim()) missingFields.push("เวลารายงาน");
+
+    // กรอง entry ที่มีข้อมูลอยู่จริงๆ (ไม่ใช่ว่างเปล่า)
+    const nonEmptyEntries = entries.filter(entry => {
+      if (entry.category === "other") {
+        // ไม่ดูจาก count เพราะรายการใหม่ตั้งต้นเป็น 1 อยู่แล้ว
+        return (
+          entry.cadet_name?.trim() ||
+          entry.reason?.trim() ||
+          entry.location?.trim() ||
+          entry.subcategory?.trim()
+        );
+      }
+      return (
+        entry.cadet_name?.trim() ||
+        entry.reason?.trim() ||
+        entry.location?.trim() ||
+        hasPeriodInput(entry)
+      );
+    });
+
+    // ตรวจสอบรายการที่มีข้อมูลว่ากรอกครบหรือไม่
+    const invalidEntries = nonEmptyEntries.filter(entry => {
+      if (entry.category === "other") {
+        // มีรายชื่อ = ใช้ได้ (นับหัวจากรายชื่อ)
+        if (splitCadetNames(entry.cadet_name).length > 0) return false;
+        // ข้อมูลเก่าที่บันทึกแบบหัวข้อ + จำนวน ยังถือว่าใช้ได้
+        return !(entry.subcategory?.trim() && (Number(entry.count) || 0) > 0);
+      }
+
+      const hasName = Boolean(entry.cadet_name?.trim());
+      const hasReason = Boolean(entry.reason?.trim());
+      const hasLocation = Boolean(entry.location?.trim());
+
+      // รายการที่เริ่มกรอกแล้วต้องมีชื่อ สาเหตุ และสถานที่ครบ
+      return !hasName || !hasReason || !hasLocation;
+    });
+
+    if (invalidEntries.length > 0) {
+      const incompleteOther = invalidEntries.filter(e => e.category === "other");
+      const incompleteNormal = invalidEntries.filter(e => e.category !== "other");
+
+      if (incompleteOther.length > 0) {
+        toast.error(`กรุณาเลือกรายชื่อในรายการอื่น ๆ`);
+        return false;
+      }
+
+      if (incompleteNormal.length > 0) {
+        toast.error(`กรุณากรอกชื่อ สาเหตุ และสถานที่ให้ครบทุกรายการ`);
+        return false;
+      }
+    }
+
+    const timedEntries = nonEmptyEntries.filter((entry) => hasDispatchPeriod(entry.category));
+    const periodIssues = timedEntries.map((entry) =>
+      validateDispatchPeriod(parseDispatchPeriod(entry.subcategory)),
+    );
+
+    if (periodIssues.includes("incomplete")) {
+      toast.error("กรุณากรอกวันและเวลาเริ่มต้นถึงสิ้นสุดของรายการลาและราชการให้ครบ");
+      return false;
+    }
+
+    if (periodIssues.includes("order")) {
+      toast.error("วันและเวลาสิ้นสุดต้องอยู่หลังวันและเวลาเริ่มต้น");
+      return false;
+    }
 
     if (missingFields.length > 0) {
       toast.error(`กรุณากรอก${missingFields.join(" และ ")}ก่อนบันทึก`);
@@ -245,11 +431,23 @@ function CompanyPage() {
 
   const save = useMutation({
     mutationFn: async () => {
+      const entriesWithPeriodIds = entries.map((entry) => {
+        if (!hasDispatchPeriod(entry.category)) return entry;
+
+        const period = parseDispatchPeriod(entry.subcategory);
+        return {
+          ...entry,
+          subcategory: serializeDispatchPeriod({
+            ...period,
+            id: period.id || crypto.randomUUID(),
+          }),
+        };
+      });
       const row: ReportRowData = {
         reportTime: selectedReportTime,
         reporterName: reporterName.trim(),
         reporterPosition: reporterPosition.trim(),
-        entries: cleanReportEntries(entries),
+        entries: cleanReportEntries(entriesWithPeriodIds),
       };
       const existingRows = decodeReportRows(report);
       const nextRows = [
@@ -304,9 +502,15 @@ function CompanyPage() {
       }
     },
     onSuccess: () => {
-      toast.success(`บันทึกเรียบร้อย ยอดสุทธิหลังบันทึก ${strengthSummary.remaining} นาย`);
-      qc.invalidateQueries({ queryKey: ["report", id, date] });
-      qc.invalidateQueries({ queryKey: ["other-options"] });
+      toast.success(
+        strengthSummary.dispatched === 0
+          ? "บันทึกเรียบร้อย ไม่มีจำหน่าย ส่งยอดแล้ว"
+          : `บันทึกเรียบร้อย ยอดสุทธิหลังบันทึก ${strengthSummary.remaining} นาย`,
+      );
+      qc.invalidateQueries({ queryKey: ["report", id] });
+      qc.invalidateQueries({ queryKey: ["home-summary"] });
+      qc.invalidateQueries({ queryKey: ["admin-summary"] });
+      qc.invalidateQueries({ queryKey: ["report-export"] });
     },
     onError: (error: Error) => toast.error(error.message || "บันทึกไม่สำเร็จ"),
   });
@@ -364,7 +568,7 @@ function CompanyPage() {
               <Input
                 value={reporterName}
                 onChange={(e) => setReporterName(e.target.value)}
-                placeholder="นรต.วิจัย กรณี"
+                placeholder="นรต.เกียรติศักดิ์"
               />
             </div>
             <div className="sm:col-span-2">
@@ -375,6 +579,76 @@ function CompanyPage() {
                 placeholder="๐"
               />
             </div>
+            {filteredStudents.length > 0 && (
+              <div className="space-y-2 sm:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  aria-expanded={showReporterStudentList}
+                  onClick={() => setShowReporterStudentList((current) => !current)}
+                >
+                  {showReporterStudentList ? (
+                    <>
+                      <ChevronUp className="mr-1 h-4 w-4" />
+                      ซ่อนรายชื่อ
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="mr-1 h-4 w-4" />
+                      แสดงรายชื่อ ({filteredStudents.length} คน)
+                    </>
+                  )}
+                </Button>
+
+                {showReporterStudentList && (
+                  <div className="space-y-2">
+                    <Input
+                      value={reporterSearchQuery}
+                      onChange={(event) => setReporterSearchQuery(event.target.value)}
+                      placeholder="ค้นหารายชื่อ..."
+                      aria-label="ค้นหารายชื่อผู้ควบคุมแถว"
+                    />
+                    <div className="grid max-h-52 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
+                      {filteredStudents
+                        .filter((student) => {
+                          const query = reporterSearchQuery.trim().toLocaleLowerCase("th");
+                          if (!query) return true;
+
+                          return (
+                            student.display_name.toLocaleLowerCase("th").includes(query) ||
+                            student.name.toLocaleLowerCase("th").includes(query) ||
+                            student.surname.toLocaleLowerCase("th").includes(query) ||
+                            student.number.includes(query)
+                          );
+                        })
+                        .map((student) => {
+                          const fullName = [student.name, student.surname]
+                            .filter(Boolean)
+                            .join(" ");
+                          const selected =
+                            reporterName.trim() === `นรต.${fullName}` &&
+                            reporterPosition.trim() === student.number;
+
+                          return (
+                            <Button
+                              key={`${student.squad}-${student.number}`}
+                              type="button"
+                              size="sm"
+                              variant={selected ? "default" : "outline"}
+                              className="h-auto min-h-9 w-full justify-start whitespace-normal px-3 py-2 text-left text-xs"
+                              onClick={() => selectReporter(student)}
+                            >
+                              {student.display_name}
+                            </Button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -438,7 +712,7 @@ function CompanyPage() {
                 ))
               ) : (
                 <div className="rounded-md bg-muted/30 px-3 py-2 text-muted-foreground">
-                  ไม่มีรายการจำหน่าย
+                  ไม่มีจำหน่าย
                 </div>
               )}
             </div>
@@ -449,6 +723,15 @@ function CompanyPage() {
           const list = entries
             .map((entry, i) => ({ entry, i }))
             .filter((item) => item.entry.category === category);
+          const hasDateRange = category === "leave" || category === "official";
+          const dateRangeLabel = category === "official" ? "ปฏิบัติราชการ" : "ลา";
+
+          // นับยอดจำหน่ายในหมวดนี้ (รายชื่อ หรือจำนวนที่กรอกไว้สำหรับ "อื่น ๆ")
+          const totalStudents = list.reduce(
+            (sum, { entry }) => sum + countDispatchEntry(entry),
+            0,
+          );
+
           return (
             <Card
               key={category}
@@ -462,8 +745,8 @@ function CompanyPage() {
                   <CardTitle className="text-base leading-tight">
                     {CATEGORY_LABELS[category]}
                   </CardTitle>
-                  {list.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">{list.length} รายการ</p>
+                  {totalStudents > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">{totalStudents} คน</p>
                   )}
                 </div>
                 <Button
@@ -486,104 +769,171 @@ function CompanyPage() {
                     key={entry.id ?? entry._local}
                     className="space-y-2 rounded-lg border bg-muted/30 p-3"
                   >
-                    {category === "other" ? (
-                      <>
-                        <div className="grid grid-cols-[1fr_auto] gap-2 md:grid-cols-[minmax(0,1fr)_150px_auto]">
-                          <Input
-                            list={`other-options-${i}`}
-                            placeholder="ชื่อภารกิจ เช่น ช่วยงาน"
-                            value={entry.subcategory}
-                            onChange={(event) =>
-                              updateEntry(i, { subcategory: event.target.value })
+                    <>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <textarea
+                          ref={(el) => {
+                            if (el) {
+                              el.style.height = 'auto';
+                              el.style.height = el.scrollHeight + 'px';
                             }
-                            className="col-span-2 md:col-span-1"
-                          />
-                          <datalist id={`other-options-${i}`}>
-                            {otherOptions.map((option) => (
-                              <option key={option.name} value={option.name} />
-                            ))}
-                          </datalist>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={entry.count}
-                              onChange={(event) =>
-                                updateEntry(i, { count: Number(event.target.value) })
-                              }
-                              placeholder="จำนวนคน"
-                              aria-label="จำนวนคน หน่วยนาย"
-                              className="pr-12"
-                            />
-                            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
-                              นาย
-                            </span>
-                          </div>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeEntry(i)}
-                            className="justify-self-end"
-                            aria-label="ลบรายการ"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                          }}
+                          placeholder="ชื่อ เช่น วิจัย ก."
+                          value={entry.cadet_name}
+                          onChange={(event) => {
+                            updateEntry(i, { cadet_name: event.target.value });
+                            const target = event.target as HTMLTextAreaElement;
+                            target.style.height = 'auto';
+                            target.style.height = target.scrollHeight + 'px';
+                          }}
+                          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm resize-none overflow-hidden"
+                          rows={1}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeEntry(i)}
+                          aria-label="ลบรายการ"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
 
-                        {otherOptions.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {otherOptions.map((option) => {
-                              const selected =
-                                normalizeOtherSubcategory(entry.subcategory) === option.name;
-
-                              return (
-                                <Button
-                                  key={option.name}
-                                  type="button"
-                                  size="sm"
-                                  variant={selected ? "default" : "outline"}
-                                  onClick={() => selectOtherSubcategory(i, option.name)}
-                                  className="max-w-full overflow-hidden text-ellipsis"
-                                  title={`มีใน ${option.companyNames.join(", ") || "หมวดอื่น"} รวม ${option.count} นาย`}
-                                >
-                                  {option.name}
-                                </Button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                          <Input
-                            placeholder="ชื่อ เช่น วิจัย ก."
-                            value={entry.cadet_name}
-                            onChange={(event) => updateEntry(i, { cadet_name: event.target.value })}
-                          />
+                      {filteredStudents.length > 0 && (
+                        <>
                           <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeEntry(i)}
-                            aria-label="ลบรายการ"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowStudentList(prev => ({ ...prev, [i]: !prev[i] }))}
+                            className="w-full"
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                            {showStudentList[i] ? (
+                              <>
+                                <ChevronUp className="h-4 w-4 mr-1" />
+                                ซ่อนรายชื่อ
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                แสดงรายชื่อ ({filteredStudents.length} คน)
+                              </>
+                            )}
                           </Button>
+
+                          {showStudentList[i] && (
+                            <>
+                              <Input
+                                placeholder="ค้นหารายชื่อ..."
+                                value={searchQuery[i] || ''}
+                                onChange={(e) => setSearchQuery(prev => ({ ...prev, [i]: e.target.value }))}
+                                className="text-sm"
+                              />
+                              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto border rounded-md p-2">
+                                {filteredStudents
+                                  .filter(student => {
+                                    const query = (searchQuery[i] || '').toLowerCase();
+                                    if (!query) return true;
+                                    return student.display_name.toLowerCase().includes(query) ||
+                                           student.name.toLowerCase().includes(query) ||
+                                           student.surname.toLowerCase().includes(query) ||
+                                           student.number.includes(query);
+                                  })
+                                  .map((student) => {
+                                    // ตรวจสอบว่านักเรียนคนนี้ถูกจำหน่ายในหมวดอื่นหรือไม่
+                                    const currentEntry = entries[i];
+                                    const otherEntry = entries.find((e, idx) => {
+                                      if (idx === i) return false; // ไม่เช็คตัวเอง
+                                      const names = e.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
+                                      return names.includes(student.display_name);
+                                    });
+
+                                    const currentNames = entry.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
+                                    const selected = currentNames.includes(student.display_name);
+                                    const isInOtherCategory = !!otherEntry;
+                                    const otherCategoryLabel = otherEntry ? CATEGORY_LABELS[otherEntry.category] : '';
+
+                                    return (
+                                      <Button
+                                        key={`${student.squad}-${student.number}`}
+                                        type="button"
+                                        size="sm"
+                                        variant={selected ? "default" : isInOtherCategory ? "secondary" : "outline"}
+                                        onClick={() => {
+                                          const current = entry.cadet_name.trim();
+
+                                          if (selected) {
+                                            // ลบรายชื่อออกจากหมวดนี้
+                                            const filtered = currentNames.filter(n => n !== student.display_name);
+                                            updateEntry(i, { cadet_name: filtered.join(', ') });
+                                          } else if (isInOtherCategory && otherEntry) {
+                                            // ลบออกจากหมวดเดิมและเพิ่มเข้าหมวดใหม่
+                                            const otherIndex = entries.findIndex(e => e === otherEntry);
+                                            const otherNames = otherEntry.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
+                                            const filteredOtherNames = otherNames.filter(n => n !== student.display_name);
+                                            updateEntry(otherIndex, { cadet_name: filteredOtherNames.join(', ') });
+
+                                            // เพิ่มเข้าหมวดใหม่
+                                            const newValue = current ? `${current}, ${student.display_name}` : student.display_name;
+                                            updateEntry(i, { cadet_name: newValue });
+                                          } else {
+                                            // เพิ่มรายชื่อปกติ
+                                            const newValue = current ? `${current}, ${student.display_name}` : student.display_name;
+                                            updateEntry(i, { cadet_name: newValue });
+                                          }
+                                        }}
+                                        className="text-xs h-auto px-2 py-1 whitespace-normal text-left"
+                                        title={student.display_name}
+                                      >
+                                        {student.display_name}
+                                        {isInOtherCategory && !selected && (
+                                          <span className="ml-1 text-[10px] opacity-70">
+                                            (ขณะนี้: จำหน่าย{otherCategoryLabel})
+                                          </span>
+                                        )}
+                                      </Button>
+                                    );
+                                  })}
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input
+                          placeholder="สาเหตุ"
+                          value={entry.reason}
+                          onChange={(event) => updateEntry(i, { reason: event.target.value })}
+                        />
+                        <Input
+                          placeholder="สถานที่"
+                          value={entry.location}
+                          onChange={(event) => updateEntry(i, { location: event.target.value })}
+                        />
+                      </div>
+
+                      {category === "other" && splitCadetNames(entry.cadet_name).length > 0 && (
+                        <div className="rounded-md bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                          จำหน่าย {splitCadetNames(entry.cadet_name).length} นาย ตามรายชื่อที่เลือก
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <Input
-                            placeholder="สาเหตุ"
-                            value={entry.reason}
-                            onChange={(event) => updateEntry(i, { reason: event.target.value })}
+                      )}
+
+                      {hasDateRange && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <DispatchDateTimeInput
+                            label={`วันและเวลาเริ่ม${dateRangeLabel}`}
+                            value={parseDispatchPeriod(entry.subcategory).start}
+                            onChange={(value) => updateEntryPeriod(i, "start", value)}
                           />
-                          <Input
-                            placeholder="สถานที่"
-                            value={entry.location}
-                            onChange={(event) => updateEntry(i, { location: event.target.value })}
+                          <DispatchDateTimeInput
+                            label={`วันและเวลาสิ้นสุด${dateRangeLabel}`}
+                            value={parseDispatchPeriod(entry.subcategory).end}
+                            onChange={(value) => updateEntryPeriod(i, "end", value)}
                           />
                         </div>
-                      </>
-                    )}
+                      )}
+                    </>
                   </div>
                 ))}
               </CardContent>

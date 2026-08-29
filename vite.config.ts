@@ -42,18 +42,10 @@ export default defineConfig({
       },
       server: { entry: "server" },
     }),
-    nitro({
-      preset: "cloudflare-module",
-      output: {
-        dir: "dist",
-        serverDir: "dist/server",
-        publicDir: "dist/client",
-      },
-      cloudflare: {
-        nodeCompat: true,
-        deployConfig: true,
-      },
-    }),
+    // Vercel expects Nitro's Build Output API files under `.vercel/output`.
+    // The Cloudflare preset writes a Wrangler worker instead, which Vercel
+    // cannot serve as a deployment function.
+    nitro({ preset: "vercel" }),
     viteReact(),
   ],
 });
