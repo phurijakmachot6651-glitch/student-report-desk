@@ -26,7 +26,7 @@ import { isReportTimeApproaching } from "@/lib/report-time-alert";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "ระบบจัดทำยอดกำลังพล นรต." },
+      { title: "เช็คยอดกองร้อยที่ 4" },
       { name: "description", content: "ระบบจัดทำยอดกำลังพลนักเรียนนายร้อยตำรวจ" },
     ],
   }),
@@ -131,7 +131,7 @@ function Home() {
               className="float-soft h-9 w-9 shrink-0 rounded-full border border-primary/30 object-contain shadow-sm ring-2 ring-primary/10"
             />
             <h1 className="min-w-0 truncate text-base font-bold leading-tight sm:text-lg">
-              ยอดกำลังพล นรต. กองร้อยที่ ๔
+              เช็คยอดกองร้อยที่ 4
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">

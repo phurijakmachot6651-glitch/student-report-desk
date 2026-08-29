@@ -102,7 +102,7 @@ export function SplashScreen() {
             className="reveal-stagger gold-text text-2xl font-extrabold tracking-tight sm:text-3xl"
             style={{ "--i": 0, animationDelay: "250ms" } as React.CSSProperties}
           >
-            ยอดกำลังพล นรต.
+            เช็คยอดกองร้อยที่ 4
           </h1>
 
           <p

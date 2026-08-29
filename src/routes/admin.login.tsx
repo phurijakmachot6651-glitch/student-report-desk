@@ -67,7 +67,7 @@ function AdminLogin() {
               />
             </div>
             <CardTitle className="gold-text text-xl">แอดมิน</CardTitle>
-            <CardDescription>ระบบจัดทำยอดกำลังพล นรต.</CardDescription>
+            <CardDescription>เช็คยอดกองร้อยที่ 4</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             <Tabs defaultValue="login">
