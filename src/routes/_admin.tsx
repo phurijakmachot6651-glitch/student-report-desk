@@ -61,6 +61,7 @@ function AdminLayout() {
             <nav className="-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-1 text-sm sm:mx-0 sm:px-0 md:pb-0">
               <Link
                 to="/admin"
+                activeOptions={{ exact: true, includeSearch: false }}
                 className="relative flex h-10 shrink-0 items-center rounded-md px-3 transition-colors hover:bg-secondary/40"
                 activeProps={{
                   className:
@@ -71,6 +72,7 @@ function AdminLayout() {
               </Link>
               <Link
                 to="/admin/report"
+                activeOptions={{ exact: true, includeSearch: false }}
                 className="relative flex h-10 shrink-0 items-center rounded-md px-3 transition-colors hover:bg-secondary/40"
                 activeProps={{
                   className:
@@ -80,7 +82,19 @@ function AdminLayout() {
                 ส่งออกรายงาน
               </Link>
               <Link
+                to="/admin/manpower"
+                activeOptions={{ exact: true, includeSearch: false }}
+                className="relative flex h-10 shrink-0 items-center rounded-md px-3 transition-colors hover:bg-secondary/40"
+                activeProps={{
+                  className:
+                    "relative flex h-10 shrink-0 items-center rounded-md bg-primary/15 px-3 font-semibold text-primary after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary",
+                }}
+              >
+                ใบกำลังพล
+              </Link>
+              <Link
                 to="/admin/settings"
+                activeOptions={{ exact: true, includeSearch: false }}
                 className="relative flex h-10 shrink-0 items-center rounded-md px-3 transition-colors hover:bg-secondary/40"
                 activeProps={{
                   className:

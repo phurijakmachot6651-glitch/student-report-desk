@@ -1,76 +1,86 @@
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "splash-shown";
-
 type Phase = "entering" | "exiting" | "done";
 
 /**
- * Full-screen tiger-themed splash screen shown once per browser session.
+ * Full-screen splash shown while the first page and its visual assets load.
  *
- * Renders nothing on the server (or if already shown this session) so
- * there is no SSR/hydration mismatch.
- *
- * Timeline:
- *   t=0ms     logo animates in (logo-glow-in)
- *   t=250ms   app name reveals up
- *   t=420ms   subtitle reveals up
- *   t=580ms   gold bar sweeps in (bar-fill)
- *   t=1300ms  → exiting: splash-exit plays (500ms)
- *   t=1800ms  → done: component unmounts
+ * It intentionally renders during SSR, preventing the report page from
+ * flashing behind the splash before React hydrates in LINE WebView.
  */
 export function SplashScreen() {
-  const [phase, setPhase] = useState<Phase | null>(null);
+  const [phase, setPhase] = useState<Phase>("entering");
 
   useEffect(() => {
-    // Guard: skip on SSR and skip if already shown this session.
-    try {
-      if (sessionStorage.getItem(STORAGE_KEY)) {
-        setPhase("done");
-        return;
-      }
-      sessionStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      // sessionStorage unavailable (private/sandboxed) — skip splash.
-      setPhase("done");
-      return;
-    }
+    let active = true;
+    let exitStarted = false;
+    let exitTimer = 0;
+    let doneTimer = 0;
+    let safetyTimer = 0;
+    const startedAt = performance.now();
+    const beginExit = () => {
+      if (!active || exitStarted) return;
+      exitStarted = true;
+      window.clearTimeout(safetyTimer);
+      setPhase("exiting");
+      doneTimer = window.setTimeout(() => active && setPhase("done"), 500);
+    };
 
-    setPhase("entering");
+    const waitForWindow =
+      document.readyState === "complete"
+        ? Promise.resolve()
+        : new Promise<void>((resolve) =>
+            window.addEventListener("load", () => resolve(), { once: true }),
+          );
+    const waitForFonts = document.fonts?.ready?.then(() => undefined) || Promise.resolve();
+    const background = new Image();
+    background.src = "/dragon-background.png";
+    const waitForBackground = background.decode?.().catch(() => undefined) || Promise.resolve();
 
-    const exitTimer = window.setTimeout(() => setPhase("exiting"), 1300);
-    const doneTimer = window.setTimeout(() => setPhase("done"), 1800);
+    void Promise.all([waitForWindow, waitForFonts, waitForBackground]).then(() => {
+      if (!active) return;
+      const remainingMinimum = Math.max(0, 1_250 - (performance.now() - startedAt));
+      exitTimer = window.setTimeout(beginExit, remainingMinimum);
+    });
+
+    // Do not trap the user on the splash if an optional remote asset stalls.
+    safetyTimer = window.setTimeout(beginExit, 5_000);
 
     return () => {
-      clearTimeout(exitTimer);
-      clearTimeout(doneTimer);
+      active = false;
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(doneTimer);
+      window.clearTimeout(safetyTimer);
     };
   }, []);
 
-  // Not yet mounted or already finished — render nothing.
-  if (phase === null || phase === "done") return null;
+  if (phase === "done") return null;
 
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden select-none ${
+      className={`fixed inset-0 z-[9999] flex h-[100dvh] min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-[#001507] px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] isolate select-none ${
         phase === "exiting" ? "splash-exit" : ""
       }`}
-      style={{
-        backgroundImage: "url(/dragon-background.png)",
-        backgroundSize: "contain",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-        backgroundRepeat: "no-repeat",
-      }}
+      style={{ backgroundColor: "#001507" }}
     >
-      {/* Dark overlay for readability */}
+      {/* Blurred cover fills the portrait space above and below the sharp landscape artwork. */}
       <div
-        className="absolute inset-0 opacity-40"
-        style={{ background: "oklch(0.13 0.03 84)" }}
+        className="absolute -inset-16 z-0 scale-125 bg-cover bg-center opacity-100 blur-2xl"
+        style={{ backgroundImage: "url(/dragon-background.png)" }}
       />
+      <div className="absolute inset-0 z-[1] bg-gradient-to-b from-[#001507]/80 via-[#001507]/25 to-[#001507]/85" />
+
+      {/* The original artwork stays fully visible and correctly proportioned in the center. */}
+      <img
+        src="/dragon-background.png"
+        alt=""
+        className="absolute inset-0 z-[2] h-full w-full object-contain opacity-95"
+      />
+      <div className="absolute inset-0 z-[3] bg-gradient-to-b from-black/15 via-transparent to-black/25" />
 
       {/* Animated tiger stripe background */}
-      <div className="tiger-stripes-animated absolute inset-0 opacity-15" />
+      <div className="tiger-stripes-animated absolute inset-0 z-[4] opacity-[0.06]" />
 
       {/* Radial glow behind the logo */}
       <div
@@ -78,13 +88,12 @@ export function SplashScreen() {
         style={{
           width: "260px",
           height: "260px",
-          background:
-            "radial-gradient(circle, oklch(0.76 0.15 84 / 18%) 0%, transparent 70%)",
+          background: "radial-gradient(circle, oklch(0.76 0.15 84 / 18%) 0%, transparent 70%)",
         }}
       />
 
       {/* Center content */}
-      <div className="relative flex flex-col items-center gap-5">
+      <div className="relative z-10 flex max-w-[min(92vw,26rem)] flex-col items-center gap-5 px-7 py-8 drop-shadow-[0_8px_24px_rgba(0,0,0,0.72)]">
         {/* Dragon logo */}
         <img
           src="/dragon_logo.png"
@@ -120,10 +129,7 @@ export function SplashScreen() {
         </div>
 
         {/* Gold sweep bar */}
-        <div
-          className="overflow-hidden rounded-full"
-          style={{ width: "120px", height: "3px" }}
-        >
+        <div className="overflow-hidden rounded-full" style={{ width: "120px", height: "3px" }}>
           <div
             className="bar-fill h-full w-full rounded-full gold-gradient"
             style={{ animationDelay: "580ms" }}

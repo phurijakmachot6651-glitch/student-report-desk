@@ -20,9 +20,7 @@ function NotFoundComponent() {
       <div className="reveal relative max-w-md text-center">
         <h1 className="gold-text text-8xl font-extrabold tracking-tight">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">ไม่พบหน้าที่ต้องการ</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          หน้านี้อาจถูกย้ายหรือไม่มีอยู่ในระบบ
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">หน้านี้อาจถูกย้ายหรือไม่มีอยู่ในระบบ</p>
         <div className="mt-6">
           <Link
             to="/"
@@ -78,23 +76,33 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "เช็คยอดกองร้อยที่ 4" },
-      { name: "description", content: "เช็คยอดกองร้อยที่ 4" },
+      { name: "description", content: "ระบบจัดทำยอดกำลังพลนักเรียนนายร้อยตำรวจ" },
+      { name: "theme-color", content: "#006200" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "เช็คยอดกองร้อยที่ 4" },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "เช็คยอดกองร้อยที่ 4" },
-      { property: "og:description", content: "เช็คยอดกองร้อยที่ 4" },
+      { property: "og:description", content: "ระบบจัดทำยอดกำลังพลนักเรียนนายร้อยตำรวจ" },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://student-report-desk-neon.vercel.app/" },
+      { property: "og:site_name", content: "เช็คยอดกองร้อยที่ 4" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "เช็คยอดกองร้อยที่ 4" },
-      { name: "twitter:description", content: "เช็คยอดกองร้อยที่ 4" },
+      { name: "twitter:description", content: "ระบบจัดทำยอดกำลังพลนักเรียนนายร้อยตำรวจ" },
       {
         property: "og:image",
-        content: "https://student-report-desk-red.vercel.app/og-image.jpg",
+        content: "https://student-report-desk-neon.vercel.app/dragon_logo.png",
       },
       {
         name: "twitter:image",
-        content: "https://student-report-desk-red.vercel.app/og-image.jpg",
+        content: "https://student-report-desk-neon.vercel.app/dragon_logo.png",
       },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "626" },
+      { property: "og:image:height", content: "626" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -104,6 +112,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap",
       },
+      { rel: "manifest", href: "/site.webmanifest?v=2" },
+      { rel: "icon", href: "/icons/favicon-32.png?v=2", type: "image/png", sizes: "32x32" },
+      { rel: "icon", href: "/icons/favicon-48.png?v=2", type: "image/png", sizes: "48x48" },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png?v=2", sizes: "180x180" },
     ],
   }),
   shellComponent: RootShell,
@@ -114,7 +126,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="th" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <HeadContent />

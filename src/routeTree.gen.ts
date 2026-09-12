@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CompanyIdRouteImport } from './routes/company.$id'
+import { Route as ApiDownloadFileRouteImport } from './routes/api.download-file'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminAdminRouteImport } from './routes/_admin/admin'
 import { Route as AdminAdminIndexRouteImport } from './routes/_admin/admin.index'
 import { Route as AdminAdminSettingsRouteImport } from './routes/_admin/admin.settings'
 import { Route as AdminAdminReportRouteImport } from './routes/_admin/admin.report'
+import { Route as AdminAdminManpowerRouteImport } from './routes/_admin/admin.manpower'
 
 const AdminRoute = AdminRouteImport.update({
   id: '/_admin',
@@ -30,6 +32,11 @@ const IndexRoute = IndexRouteImport.update({
 const CompanyIdRoute = CompanyIdRouteImport.update({
   id: '/company/$id',
   path: '/company/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDownloadFileRoute = ApiDownloadFileRouteImport.update({
+  id: '/api/download-file',
+  path: '/api/download-file',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -57,12 +64,19 @@ const AdminAdminReportRoute = AdminAdminReportRouteImport.update({
   path: '/report',
   getParentRoute: () => AdminAdminRoute,
 } as any)
+const AdminAdminManpowerRoute = AdminAdminManpowerRouteImport.update({
+  id: '/manpower',
+  path: '/manpower',
+  getParentRoute: () => AdminAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminAdminRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
+  '/api/download-file': typeof ApiDownloadFileRoute
   '/company/$id': typeof CompanyIdRoute
+  '/admin/manpower': typeof AdminAdminManpowerRoute
   '/admin/report': typeof AdminAdminReportRoute
   '/admin/settings': typeof AdminAdminSettingsRoute
   '/admin/': typeof AdminAdminIndexRoute
@@ -70,7 +84,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/login': typeof AdminLoginRoute
+  '/api/download-file': typeof ApiDownloadFileRoute
   '/company/$id': typeof CompanyIdRoute
+  '/admin/manpower': typeof AdminAdminManpowerRoute
   '/admin/report': typeof AdminAdminReportRoute
   '/admin/settings': typeof AdminAdminSettingsRoute
   '/admin': typeof AdminAdminIndexRoute
@@ -81,7 +97,9 @@ export interface FileRoutesById {
   '/_admin': typeof AdminRouteWithChildren
   '/_admin/admin': typeof AdminAdminRouteWithChildren
   '/admin/login': typeof AdminLoginRoute
+  '/api/download-file': typeof ApiDownloadFileRoute
   '/company/$id': typeof CompanyIdRoute
+  '/_admin/admin/manpower': typeof AdminAdminManpowerRoute
   '/_admin/admin/report': typeof AdminAdminReportRoute
   '/_admin/admin/settings': typeof AdminAdminSettingsRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
@@ -92,7 +110,9 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/admin/login'
+    | '/api/download-file'
     | '/company/$id'
+    | '/admin/manpower'
     | '/admin/report'
     | '/admin/settings'
     | '/admin/'
@@ -100,7 +120,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin/login'
+    | '/api/download-file'
     | '/company/$id'
+    | '/admin/manpower'
     | '/admin/report'
     | '/admin/settings'
     | '/admin'
@@ -110,7 +132,9 @@ export interface FileRouteTypes {
     | '/_admin'
     | '/_admin/admin'
     | '/admin/login'
+    | '/api/download-file'
     | '/company/$id'
+    | '/_admin/admin/manpower'
     | '/_admin/admin/report'
     | '/_admin/admin/settings'
     | '/_admin/admin/'
@@ -120,6 +144,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
+  ApiDownloadFileRoute: typeof ApiDownloadFileRoute
   CompanyIdRoute: typeof CompanyIdRoute
 }
 
@@ -144,6 +169,13 @@ declare module '@tanstack/react-router' {
       path: '/company/$id'
       fullPath: '/company/$id'
       preLoaderRoute: typeof CompanyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/download-file': {
+      id: '/api/download-file'
+      path: '/api/download-file'
+      fullPath: '/api/download-file'
+      preLoaderRoute: typeof ApiDownloadFileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/login': {
@@ -181,16 +213,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminReportRouteImport
       parentRoute: typeof AdminAdminRoute
     }
+    '/_admin/admin/manpower': {
+      id: '/_admin/admin/manpower'
+      path: '/manpower'
+      fullPath: '/admin/manpower'
+      preLoaderRoute: typeof AdminAdminManpowerRouteImport
+      parentRoute: typeof AdminAdminRoute
+    }
   }
 }
 
 interface AdminAdminRouteChildren {
+  AdminAdminManpowerRoute: typeof AdminAdminManpowerRoute
   AdminAdminReportRoute: typeof AdminAdminReportRoute
   AdminAdminSettingsRoute: typeof AdminAdminSettingsRoute
   AdminAdminIndexRoute: typeof AdminAdminIndexRoute
 }
 
 const AdminAdminRouteChildren: AdminAdminRouteChildren = {
+  AdminAdminManpowerRoute: AdminAdminManpowerRoute,
   AdminAdminReportRoute: AdminAdminReportRoute,
   AdminAdminSettingsRoute: AdminAdminSettingsRoute,
   AdminAdminIndexRoute: AdminAdminIndexRoute,
@@ -214,6 +255,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
+  ApiDownloadFileRoute: ApiDownloadFileRoute,
   CompanyIdRoute: CompanyIdRoute,
 }
 export const routeTree = rootRouteImport

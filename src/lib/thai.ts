@@ -1,4 +1,9 @@
 import studentsData from "@/data/students.json";
+import {
+  parseDispatchBatch,
+  parseDispatchPeriod,
+  unwrapDispatchMetadata,
+} from "@/lib/dispatch-period";
 
 // Thai numeral & report formatting helpers
 
@@ -49,13 +54,7 @@ export const CATEGORY_LABELS: Record<DispatchCategory, string> = {
   other: "อื่น ๆ",
 };
 
-export const CATEGORY_ORDER: DispatchCategory[] = [
-  "sick",
-  "leave",
-  "absent",
-  "official",
-  "other",
-];
+export const CATEGORY_ORDER: DispatchCategory[] = ["sick", "leave", "absent", "official", "other"];
 
 export type Entry = {
   category: DispatchCategory;
@@ -81,6 +80,10 @@ export type StretchExerciseReportInput = {
   reportDate: Date;
   reporterName: string;
   reporterPosition: string;
+};
+
+export type HomeLeaveReportInput = StretchExerciseReportInput & {
+  reportTime: string;
 };
 
 export type CategoryCounts = Record<DispatchCategory, number>;
@@ -112,6 +115,14 @@ export function isReportRowMeta(entry: Pick<Entry, "category" | "subcategory">):
 
 export function normalizeOtherSubcategory(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+export function getVisibleOtherSubcategory(value: string): string {
+  const batch = parseDispatchBatch(value);
+  const period = parseDispatchPeriod(value);
+  return normalizeOtherSubcategory(
+    batch?.value || period.batchValue || unwrapDispatchMetadata(value),
+  );
 }
 
 /** แยกรายชื่อที่คั่นด้วย comma ออกเป็นรายชื่อเดี่ยว */
@@ -171,7 +182,9 @@ export function emptyCategoryCounts(): CategoryCounts {
   return Object.fromEntries(CATEGORY_ORDER.map((category) => [category, 0])) as CategoryCounts;
 }
 
-export function countDispatchEntry(entry: Pick<Entry, "category" | "count" | "cadet_name">): number {
+export function countDispatchEntry(
+  entry: Pick<Entry, "category" | "count" | "cadet_name">,
+): number {
   // นับจำนวนนักเรียนจากรายชื่อที่คั่นด้วย comma
   const names = splitCadetNames(entry.cadet_name);
   if (names.length > 0) return names.length;
@@ -189,7 +202,7 @@ export function summarizeDispatchEntries(entries: Entry[], fullStrength: number)
     const count = countDispatchEntry(entry);
     const label =
       entry.category === "other"
-        ? normalizeOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other
+        ? getVisibleOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other
         : CATEGORY_LABELS[entry.category];
     const key = entry.category === "other" ? `${entry.category}:${label}` : entry.category;
     const item = itemsByKey.get(key) || {
@@ -237,7 +250,7 @@ function groupOtherEntries(list: Entry[]): OtherGroup[] {
   const grouped = new Map<string, OtherGroup>();
 
   list.forEach((entry) => {
-    const label = normalizeOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other;
+    const label = getVisibleOtherSubcategory(entry.subcategory) || CATEGORY_LABELS.other;
     const group = grouped.get(label) || { label, count: 0 };
 
     group.count += countDispatchEntry(entry);
@@ -281,8 +294,7 @@ function firstSurnameConsonant(surname: string): string {
 function formatCadetForSummary(value: string): string {
   const normalizedValue = normalizeCadetLookupValue(value);
   const plainName = removeCadetNameMetadata(normalizedValue);
-  const student =
-    studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
+  const student = studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
 
   if (student) {
     const surnameInitial = firstSurnameConsonant(student.surname);
@@ -303,8 +315,7 @@ function formatCadetForSummary(value: string): string {
 function formatCadetForReport(value: string): string {
   const normalizedValue = normalizeCadetLookupValue(value);
   const plainName = removeCadetNameMetadata(normalizedValue);
-  const student =
-    studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
+  const student = studentsByDisplayName.get(normalizedValue) || studentsByFullName.get(plainName);
 
   if (student) {
     const surnameInitial = firstSurnameConsonant(student.surname);
@@ -324,15 +335,13 @@ function formatCadetForReport(value: string): string {
 const REPORT_DETAIL_INDENT = "\t";
 
 function detailedCategoryLines(list: Entry[], includeCadetNames = true): string[] {
-  const groups = new Map<
-    string,
-    { reason: string; location: string; cadetNames: string[] }
-  >();
+  const groups = new Map<string, { reason: string; location: string; cadetNames: string[] }>();
 
   list.forEach((entry) => {
     const reason = entry.reason.trim();
     const location = entry.location.trim();
-    const key = `${reason}\u0000${location}`;
+    const batch = parseDispatchBatch(entry.subcategory);
+    const key = batch ? `batch:${batch.id}` : `${reason}\u0000${location}`;
     const group = groups.get(key) || { reason, location, cadetNames: [] };
 
     group.cadetNames.push(...splitCadetNames(entry.cadet_name));
@@ -364,7 +373,7 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
   if (cat === "other") {
     // รายการที่มีรายชื่อ สรุปตามสาเหตุและสถานที่โดยไม่แสดงรายชื่อย่อย
     const named = list.filter((e) => splitCadetNames(e.cadet_name).length > 0);
-    const namedLines = detailedCategoryLines(named, false);
+    const namedLines = detailedCategoryLines(named, false).filter((line) => line !== "");
 
     // ข้อมูลเก่าที่บันทึกแบบหัวข้อ + จำนวน ยังรวมตามหัวข้อ
     const legacyLines = groupOtherEntries(
@@ -374,12 +383,7 @@ function categoryBlock(cat: DispatchCategory, entries: Entry[]): string {
         `${REPORT_DETAIL_INDENT}- ${label}                  ${toThaiNumerals(count)} นาย`,
     );
 
-    return [
-      head,
-      ...namedLines,
-      ...(namedLines.length > 0 && legacyLines.length > 0 ? [""] : []),
-      ...legacyLines,
-    ].join("\n");
+    return [head, ...namedLines, ...legacyLines].join("\n");
   }
   const lines = list.map((e) => {
     const parts = [e.cadet_name, e.reason, e.location].filter(Boolean);
@@ -412,25 +416,46 @@ export function buildReportText(input: ReportInput): string {
 
   const body = CATEGORY_ORDER.map((c) => categoryBlock(c, entries)).join("\n");
 
-  return toThaiNumerals(`${header}\n${body}\n`);
+  return toThaiNumerals([header, body, "", "", "จึงเรียนมาเพื่อโปรดทราบ", ""].join("\n"));
 }
 
 export function buildStretchExerciseReportText(input: StretchExerciseReportInput): string {
-  return toThaiNumerals([
-    `${input.companyName}`,
-    "",
-    "**************************",
-    "",
-    "เรียน ผู้บังคับบัญชา",
-    "",
-    `กระผม ${input.reporterName || "-"}`,
-    `${input.reporterPosition || "-"} ขออนุญาตรายงานภาพการยืดเหยียดและกายบริหารของกองร้อยที่ ๔ รุ่นที่ ๘๐ ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
-    "",
-    "-การปฎิบัติเป็นไปด้วยความเรียบร้อย",
-    "",
-    "จึงเรียนมาเพื่อโปรดทราบ",
-    "",
-  ].join("\n"));
+  return toThaiNumerals(
+    [
+      `${input.companyName}`,
+      "",
+      "**************************",
+      "",
+      "เรียน ผู้บังคับบัญชา",
+      "",
+      `กระผม ${input.reporterName || "-"}`,
+      `${input.reporterPosition || "-"} ขออนุญาตรายงานภาพการยืดเหยียดและกายบริหารของกองร้อยที่ ๔ รุ่นที่ ๘๐ ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
+      "",
+      "-การปฎิบัติเป็นไปด้วยความเรียบร้อย",
+      "",
+      "จึงเรียนมาเพื่อโปรดทราบ",
+      "",
+    ].join("\n"),
+  );
+}
+
+export function buildHomeLeaveReportText(input: HomeLeaveReportInput): string {
+  const reportTime = (input.reportTime || "16:00").replace(":", ".");
+
+  return toThaiNumerals(
+    [
+      `${input.companyName}`,
+      "**************************",
+      "เรียนผู้บังคับบัญชา",
+      "",
+      `กระผม ${input.reporterName || "-"} ${input.reporterPosition || "-"}`,
+      `ขออนุญาตรายงานภาพการปล่อยพักบ้านของนักเรียนนายร้อยตำรวจชั้นปีที่ ๔ เวลา ${reportTime} น. ของ${formatThaiDateWithoutWeekday(input.reportDate)}`,
+      "",
+      "",
+      "จึงเรียนมาเพื่อโปรดทราบ",
+      "",
+    ].join("\n"),
+  );
 }
 
 function markdownCategoryBlock(cat: DispatchCategory, entries: Entry[]): string {
@@ -489,11 +514,16 @@ export function buildReportMarkdown(input: ReportInput): string {
 }
 
 export function todayISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  // Keep SSR and browser renders on the same calendar day for the Thai app.
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export function parseISODate(s: string): Date {

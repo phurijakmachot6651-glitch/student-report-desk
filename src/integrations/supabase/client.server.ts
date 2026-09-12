@@ -5,19 +5,70 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
+type JwtPayload = {
+  ref?: unknown;
+  role?: unknown;
+};
+
+function readJwtPayload(value: string): JwtPayload | undefined {
+  const parts = value.split(".");
+  if (parts.length !== 3) return undefined;
+
+  try {
+    const payload = Buffer.from(parts[1], "base64url").toString("utf8");
+    const parsed: unknown = JSON.parse(payload);
+    return parsed && typeof parsed === "object" ? (parsed as JwtPayload) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getProjectRef(url: string) {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.endsWith(".supabase.co")
+      ? hostname.slice(0, -".supabase.co".length)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validateServiceRoleKey(url: string, key: string) {
+  const payload = readJwtPayload(key);
+  const expectedRef = getProjectRef(url);
+
+  if (payload?.role === "anon") {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY ต้องเป็น service_role key ไม่ใช่ publishable/anon key",
+    );
+  }
+
+  if (expectedRef && typeof payload?.ref === "string" && payload.ref !== expectedRef) {
+    throw new Error(
+      `SUPABASE_SERVICE_ROLE_KEY ไม่ตรงกับ SUPABASE_URL (คีย์เป็นโปรเจกต์ ${payload.ref} แต่ URL เป็นโปรเจกต์ ${expectedRef})`,
+    );
+  }
+}
+
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase now also exposes a server-only `sb_secret_...` key. Prefer it
+  // when present, while keeping the legacy service-role variable supported.
+  const SUPABASE_SERVICE_ROLE_KEY =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     const missing = [
       ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_SERVICE_ROLE_KEY ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
+      ...(!SUPABASE_SERVICE_ROLE_KEY ? ["SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY"] : []),
     ];
     const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
   }
+
+  validateServiceRoleKey(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {

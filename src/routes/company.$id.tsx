@@ -1,19 +1,38 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Plus, Trash2, ArrowLeft, Users, MinusCircle, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Activity,
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarDays,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Trash2,
+  UserX,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import studentsData from "@/data/students.json";
 import {
   CATEGORY_LABELS,
-  CATEGORY_ORDER,
   cleanReportEntries,
   countDispatchEntry,
   splitCadetNames,
@@ -43,26 +62,116 @@ import {
   createDispatchPeriod,
   getDispatchPeriodKey,
   hasDispatchPeriod,
+  isContinuingDispatchEntry,
   isDispatchPeriodActiveAt,
+  isDutyAssignmentEntry,
+  isMedicalAdmissionEntry,
   parseDispatchPeriod,
   reportDateTimeToTimestamp,
   serializeDispatchPeriod,
+  stampDispatchEntryUpdatedAt,
   validateDispatchPeriod,
   type DispatchDateTimeParts,
 } from "@/lib/dispatch-period";
 
 export const Route = createFileRoute("/company/$id")({
-  validateSearch: (search): { date?: string; time?: string } => ({
+  validateSearch: (search): { date?: string; time?: string; returnTo?: "admin" } => ({
     date: typeof search.date === "string" ? search.date : undefined,
     time: typeof search.time === "string" ? search.time : undefined,
+    returnTo: search.returnTo === "admin" ? "admin" : undefined,
   }),
   component: CompanyPage,
 });
 
 type EntryRow = Entry & { id?: string; _local?: string };
-
 const HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
 const MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
+const CATEGORY_SUMMARY_ITEMS: Array<{ category: DispatchCategory; icon: LucideIcon }> = [
+  { category: "sick", icon: Activity },
+  { category: "leave", icon: CalendarDays },
+  { category: "official", icon: BriefcaseBusiness },
+  { category: "other", icon: MoreHorizontal },
+  { category: "absent", icon: UserX },
+];
+
+function normalizeCadetName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("th");
+}
+
+function cadetNamesMatch(first: string, second: string): boolean {
+  return normalizeCadetName(first) === normalizeCadetName(second);
+}
+
+function normalizeStudentSearch(value: string): string {
+  return value
+    .toLocaleLowerCase("th")
+    .replace(/^นรต\.?\s*/u, "")
+    .replace(/เลขที่/gu, "")
+    .replace(/[^ก-๙a-z0-9]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function compactStudentSearch(value: string): string {
+  return normalizeStudentSearch(value).replace(/\s+/g, "");
+}
+
+function thaiConsonantSkeleton(value: string): string {
+  return compactStudentSearch(value).replace(/(?:ะ|า|ำ|ิ|ี|ึ|ื|ุ|ู|เ|แ|โ|ใ|ไ|็|่|้|๊|๋|์|ํ)/gu, "");
+}
+
+function getStudentSearchScore(student: (typeof studentsData)[number], rawQuery: string): number {
+  const query = normalizeStudentSearch(rawQuery);
+  const compactQuery = compactStudentSearch(rawQuery);
+  if (!query || !compactQuery) return Number.POSITIVE_INFINITY;
+
+  const fullName = normalizeStudentSearch(`${student.name} ${student.surname}`);
+  const compactFullName = compactStudentSearch(fullName);
+  const name = normalizeStudentSearch(student.name);
+  const surname = normalizeStudentSearch(student.surname);
+  const initials = [student.name, student.surname]
+    .filter(Boolean)
+    .map((part) => compactStudentSearch(part).charAt(0))
+    .join("");
+  const consonants = thaiConsonantSkeleton(`${student.name}${student.surname}`);
+
+  if (student.number === compactQuery) return 0;
+  if (fullName === query || compactFullName === compactQuery) return 1;
+  if (name.startsWith(query)) return 2;
+  if (surname.startsWith(query)) return 3;
+  if (initials.startsWith(compactQuery)) return 4;
+  if (compactFullName.includes(compactQuery)) return 5;
+
+  const queryConsonants = thaiConsonantSkeleton(rawQuery);
+  if (queryConsonants.length >= 2 && consonants.includes(queryConsonants)) return 6;
+
+  return Number.POSITIVE_INFINITY;
+}
+
+/** Keep the last occurrence of a manually entered name as its active category. */
+function enforceSingleStudentCategory(entries: EntryRow[]): EntryRow[] {
+  const seen = new Set<string>();
+
+  return entries
+    .slice()
+    .reverse()
+    .map((entry) => {
+      const names = splitCadetNames(entry.cadet_name);
+      if (names.length === 0) return entry;
+
+      const remainingNames = names.filter((name) => {
+        const key = normalizeCadetName(name);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return remainingNames.length === names.length
+        ? entry
+        : { ...entry, cadet_name: remainingNames.join(", "), count: remainingNames.length };
+    })
+    .reverse();
+}
 
 function DispatchDateTimeInput({
   label,
@@ -117,11 +226,14 @@ function DispatchDateTimeInput({
 }
 
 function hasPeriodInput(entry: Entry): boolean {
-  if (!hasDispatchPeriod(entry.category)) return false;
+  if (!isContinuingDispatchEntry(entry)) return false;
 
   const period = parseDispatchPeriod(entry.subcategory);
-  return [period.start, period.end].some((parts) =>
-    Boolean(parts.date || parts.hour || parts.minute),
+  return (
+    [period.start, period.end].some((parts) => Boolean(parts.date || parts.hour || parts.minute)) ||
+    period.endIndefinite ||
+    period.medicalAdmission === true ||
+    period.dutyAssignment === true
   );
 }
 
@@ -145,20 +257,20 @@ function getActiveCarriedEntries(
   const targetTimestamp = reportDateTimeToTimestamp(reportDate, reportTime);
   if (!targetTimestamp) return [];
 
-  const latestEntries = new Map<
-    string,
-    { timestamp: string; entry: StoredDispatchEntry }
-  >();
+  const latestEntries = new Map<string, { timestamp: string; entry: StoredDispatchEntry }>();
 
   reports.forEach((storedReport) => {
     if (!storedReport.report_date) return;
 
     decodeReportRows(storedReport).forEach((row) => {
-      const rowTimestamp = reportDateTimeToTimestamp(storedReport.report_date || "", row.reportTime);
+      const rowTimestamp = reportDateTimeToTimestamp(
+        storedReport.report_date || "",
+        row.reportTime,
+      );
       if (!rowTimestamp || rowTimestamp >= targetTimestamp) return;
 
       row.entries.forEach((entry) => {
-        if (!hasDispatchPeriod(entry.category)) return;
+        if (!isContinuingDispatchEntry(entry)) return;
 
         const key = getDispatchPeriodKey(entry);
         const previous = latestEntries.get(key);
@@ -181,17 +293,18 @@ function CompanyPage() {
   const search = Route.useSearch();
   const qc = useQueryClient();
   const [date, setDate] = useState(() => search.date || todayISO());
-  const [reporterName, setReporterName] = useState("");
-  const [reporterPosition, setReporterPosition] = useState("");
   const [reportTime, setReportTime] = useState(() =>
     isValidReportTime(search.time) ? normalizeReportTime(search.time) : DEFAULT_REPORT_TIME,
   );
   const [entries, setEntries] = useState<EntryRow[]>([]);
-  const [showReporterStudentList, setShowReporterStudentList] = useState(false);
-  const [reporterSearchQuery, setReporterSearchQuery] = useState("");
-  const [showStudentList, setShowStudentList] = useState<Record<number, boolean>>({});
   const [searchQuery, setSearchQuery] = useState<Record<number, string>>({});
+  const [selectedCategory, setSelectedCategory] = useState<DispatchCategory | null>(null);
   const selectedReportTime = normalizeReportTime(reportTime);
+  const returnToAdmin = search.returnTo === "admin";
+  const adminReturnSearch = {
+    date: search.date || date,
+    time: isValidReportTime(search.time) ? normalizeReportTime(search.time) : selectedReportTime,
+  };
 
   const { data: reportTimeSettings } = useQuery({
     queryKey: REPORT_TIME_SETTINGS_QUERY_KEY,
@@ -231,10 +344,15 @@ function CompanyPage() {
   // Filter students by squad based on company display_order
   const filteredStudents = useMemo(() => {
     if (!company?.display_order) return studentsData;
-    return studentsData.filter(student => student.squad === String(company.display_order));
+    return studentsData.filter((student) => student.squad === String(company.display_order));
   }, [company?.display_order]);
 
   const strengthSummary = summarizeDispatchEntries(entries, company?.full_strength || 0);
+  const selectedCategoryEntries = selectedCategory
+    ? entries
+        .map((entry, index) => ({ entry, index }))
+        .filter(({ entry }) => entry.category === selectedCategory)
+    : [];
 
   const { data: reports = [] } = useQuery({
     queryKey: ["report", id, date],
@@ -271,7 +389,7 @@ function CompanyPage() {
     const rowEntries = (row?.entries || []).map(toEntryRow);
     const currentPeriodKeys = new Set(
       rowEntries
-        .filter((entry) => hasDispatchPeriod(entry.category))
+        .filter((entry) => isContinuingDispatchEntry(entry))
         .map((entry) => getDispatchPeriodKey(entry)),
     );
     const activeEntries = carriedEntries
@@ -279,12 +397,8 @@ function CompanyPage() {
       .map(toEntryRow);
 
     if (row) {
-      setReporterName(row.reporterName || "");
-      setReporterPosition(row.reporterPosition || "");
       setEntries([...rowEntries, ...activeEntries]);
     } else {
-      setReporterName("");
-      setReporterPosition("");
       setEntries(activeEntries);
     }
   }, [date, currentReportMatch, carriedEntries, selectedReportTime]);
@@ -310,6 +424,46 @@ function CompanyPage() {
     setEntries((prev) => prev.map((entry, i) => (i === idx ? { ...entry, ...patch } : entry)));
   };
 
+  const toggleStudentInEntry = (idx: number, studentName: string) => {
+    setEntries((prev) => {
+      const currentEntry = prev[idx];
+      if (!currentEntry) return prev;
+
+      const currentNames = splitCadetNames(currentEntry.cadet_name);
+      const selected = currentNames.some((name) => cadetNamesMatch(name, studentName));
+
+      // Clicking an already selected name removes it from this entry. When a
+      // name is added, remove it from every other entry first so one cadet can
+      // never remain in two dispatch categories.
+      const nextEntries = prev.map((entry, entryIndex) => {
+        const names = splitCadetNames(entry.cadet_name);
+        if (entryIndex === idx) {
+          const nextNames = selected
+            ? names.filter((name) => !cadetNamesMatch(name, studentName))
+            : [...names.filter((name) => !cadetNamesMatch(name, studentName)), studentName];
+          return { ...entry, cadet_name: nextNames.join(", ") };
+        }
+
+        if (selected) return entry;
+
+        const nextNames = names.filter((name) => !cadetNamesMatch(name, studentName));
+        return nextNames.length === names.length
+          ? entry
+          : { ...entry, cadet_name: nextNames.join(", "), count: nextNames.length };
+      });
+
+      if (selected) return nextEntries;
+
+      // Removing the final name from an old row should remove that row too;
+      // otherwise its remaining reason/location would fail form validation.
+      return nextEntries.filter((entry, entryIndex) => {
+        if (entryIndex === idx) return true;
+        const hadName = splitCadetNames(prev[entryIndex]?.cadet_name).length > 0;
+        return !hadName || splitCadetNames(entry.cadet_name).length > 0;
+      });
+    });
+  };
+
   const updateEntryPeriod = (
     idx: number,
     boundary: "start" | "end",
@@ -332,26 +486,75 @@ function CompanyPage() {
     );
   };
 
-  const removeEntry = (idx: number) => {
-    setEntries((prev) => prev.filter((_, i) => i !== idx));
+  const updateEntryMedicalAdmission = (idx: number, admitted: boolean) => {
+    setEntries((prev) =>
+      prev.map((entry, entryIndex) => {
+        if (entryIndex !== idx || entry.category !== "sick") return entry;
+
+        if (!admitted) {
+          return { ...entry, subcategory: "" };
+        }
+
+        const period = parseDispatchPeriod(entry.subcategory);
+        const [hour = "", minute = ""] = selectedReportTime.split(".");
+        return {
+          ...entry,
+          subcategory: serializeDispatchPeriod({
+            ...period,
+            id: period.id || crypto.randomUUID(),
+            batchId: period.batchId || period.id || crypto.randomUUID(),
+            batchCategory: "sick",
+            start: { date, hour, minute },
+            end: { date: "", hour: "", minute: "" },
+            endIndefinite: false,
+            medicalAdmission: true,
+          }),
+        };
+      }),
+    );
   };
 
-  const selectReporter = (student: (typeof studentsData)[number]) => {
-    const fullName = [student.name, student.surname].filter(Boolean).join(" ");
-    setReporterName(`นรต.${fullName}`);
-    setReporterPosition(student.number);
-    setShowReporterStudentList(false);
-    setReporterSearchQuery("");
+  const updateEntryDutyAssignment = (idx: number, assigned: boolean) => {
+    setEntries((prev) =>
+      prev.map((entry, entryIndex) => {
+        if (entryIndex !== idx || entry.category !== "other") return entry;
+
+        if (!assigned) {
+          return { ...entry, subcategory: "" };
+        }
+
+        const period = parseDispatchPeriod(entry.subcategory);
+        const [hour = "", minute = ""] = selectedReportTime.split(".");
+        const periodId = period.id || crypto.randomUUID();
+        return {
+          ...entry,
+          subcategory: serializeDispatchPeriod({
+            ...period,
+            id: periodId,
+            batchId: period.batchId || periodId,
+            batchCategory: "other",
+            batchValue: entry.reason.trim() || undefined,
+            start: { date, hour, minute },
+            end: { date: "", hour: "", minute: "" },
+            endIndefinite: false,
+            dutyAssignment: true,
+          }),
+        };
+      }),
+    );
+  };
+
+  const removeEntry = (idx: number) => {
+    setEntries((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const validateReportRequiredFields = () => {
     const missingFields: string[] = [];
 
-    if (!reporterName.trim()) missingFields.push("ชื่อผู้ควบคุมแถว");
     if (!reportTime.trim()) missingFields.push("เวลารายงาน");
 
     // กรอง entry ที่มีข้อมูลอยู่จริงๆ (ไม่ใช่ว่างเปล่า)
-    const nonEmptyEntries = entries.filter(entry => {
+    const nonEmptyEntries = entries.filter((entry) => {
       if (entry.category === "other") {
         // ไม่ดูจาก count เพราะรายการใหม่ตั้งต้นเป็น 1 อยู่แล้ว
         return (
@@ -370,7 +573,7 @@ function CompanyPage() {
     });
 
     // ตรวจสอบรายการที่มีข้อมูลว่ากรอกครบหรือไม่
-    const invalidEntries = nonEmptyEntries.filter(entry => {
+    const invalidEntries = nonEmptyEntries.filter((entry) => {
       if (entry.category === "other") {
         // มีรายชื่อ = ใช้ได้ (นับหัวจากรายชื่อ)
         if (splitCadetNames(entry.cadet_name).length > 0) return false;
@@ -387,8 +590,8 @@ function CompanyPage() {
     });
 
     if (invalidEntries.length > 0) {
-      const incompleteOther = invalidEntries.filter(e => e.category === "other");
-      const incompleteNormal = invalidEntries.filter(e => e.category !== "other");
+      const incompleteOther = invalidEntries.filter((e) => e.category === "other");
+      const incompleteNormal = invalidEntries.filter((e) => e.category !== "other");
 
       if (incompleteOther.length > 0) {
         toast.error(`กรุณาเลือกรายชื่อในรายการอื่น ๆ`);
@@ -407,7 +610,7 @@ function CompanyPage() {
     );
 
     if (periodIssues.includes("incomplete")) {
-      toast.error("กรุณากรอกวันและเวลาเริ่มต้นถึงสิ้นสุดของรายการลาและราชการให้ครบ");
+      toast.error("กรุณากรอกวันและเวลาเริ่มต้นและสิ้นสุดให้ครบ");
       return false;
     }
 
@@ -431,25 +634,24 @@ function CompanyPage() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const entriesWithPeriodIds = entries.map((entry) => {
-        if (!hasDispatchPeriod(entry.category)) return entry;
-
-        const period = parseDispatchPeriod(entry.subcategory);
-        return {
-          ...entry,
-          subcategory: serializeDispatchPeriod({
-            ...period,
-            id: period.id || crypto.randomUUID(),
-          }),
-        };
-      });
+      const savedAt = new Date().toISOString();
+      const entriesWithUpdatedAt = enforceSingleStudentCategory(entries).map((entry) =>
+        stampDispatchEntryUpdatedAt(entry, savedAt),
+      );
+      const existingRows = decodeReportRows(report);
+      const existingSelectedRow = existingRows.find(
+        (existingRow) => normalizeReportTime(existingRow.reportTime) === selectedReportTime,
+      );
       const row: ReportRowData = {
         reportTime: selectedReportTime,
-        reporterName: reporterName.trim(),
-        reporterPosition: reporterPosition.trim(),
-        entries: cleanReportEntries(entriesWithPeriodIds),
+        // Keep legacy metadata when editing an existing report. These fields
+        // are no longer collected in the form, but older reports may still
+        // contain them.
+        reporterName: existingSelectedRow?.reporterName || existingRows[0]?.reporterName || "",
+        reporterPosition:
+          existingSelectedRow?.reporterPosition || existingRows[0]?.reporterPosition || "",
+        entries: cleanReportEntries(entriesWithUpdatedAt),
       };
-      const existingRows = decodeReportRows(report);
       const nextRows = [
         ...existingRows.filter(
           (existingRow) => normalizeReportTime(existingRow.reportTime) !== selectedReportTime,
@@ -520,19 +722,32 @@ function CompanyPage() {
       <div className="tiger-stripes pointer-events-none fixed inset-0 opacity-30" />
       <header className="sticky top-0 z-20 border-b border-primary/15 bg-card/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-3 py-3 sm:px-4">
-          <Link
-            to="/"
-            className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" /> กลับ
-          </Link>
+          {returnToAdmin ? (
+            <Link
+              to="/admin"
+              search={adminReturnSearch}
+              className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" /> กลับ
+            </Link>
+          ) : (
+            <Link
+              to="/"
+              className="flex h-10 shrink-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" /> กลับ
+            </Link>
+          )}
           <h1 className="min-w-0 truncate text-base font-bold">{company?.name || "กรอกยอด"}</h1>
           <ThemeToggle className="shrink-0" />
         </div>
       </header>
 
       <main className="relative mx-auto max-w-3xl space-y-4 px-3 py-4 pb-28 sm:px-4 sm:py-6">
-        <Card className="reveal-stagger overflow-hidden rounded-xl" style={{ "--i": 0 } as React.CSSProperties}>
+        <Card
+          className="reveal-stagger overflow-hidden rounded-xl"
+          style={{ "--i": 0 } as React.CSSProperties}
+        >
           <div className="gold-gradient h-1 w-full opacity-70" />
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ข้อมูลทั่วไป</CardTitle>
@@ -563,99 +778,10 @@ function CompanyPage() {
                 )}
               </select>
             </div>
-            <div className="sm:col-span-2">
-              <Label>ชื่อผู้ควบคุมแถว</Label>
-              <Input
-                value={reporterName}
-                onChange={(e) => setReporterName(e.target.value)}
-                placeholder="นรต.เกียรติศักดิ์"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Label>เลขที่ในหมวด</Label>
-              <Input
-                value={reporterPosition}
-                onChange={(e) => setReporterPosition(e.target.value)}
-                placeholder="๐"
-              />
-            </div>
-            {filteredStudents.length > 0 && (
-              <div className="space-y-2 sm:col-span-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  aria-expanded={showReporterStudentList}
-                  onClick={() => setShowReporterStudentList((current) => !current)}
-                >
-                  {showReporterStudentList ? (
-                    <>
-                      <ChevronUp className="mr-1 h-4 w-4" />
-                      ซ่อนรายชื่อ
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="mr-1 h-4 w-4" />
-                      แสดงรายชื่อ ({filteredStudents.length} คน)
-                    </>
-                  )}
-                </Button>
-
-                {showReporterStudentList && (
-                  <div className="space-y-2">
-                    <Input
-                      value={reporterSearchQuery}
-                      onChange={(event) => setReporterSearchQuery(event.target.value)}
-                      placeholder="ค้นหารายชื่อ..."
-                      aria-label="ค้นหารายชื่อผู้ควบคุมแถว"
-                    />
-                    <div className="grid max-h-52 gap-1.5 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
-                      {filteredStudents
-                        .filter((student) => {
-                          const query = reporterSearchQuery.trim().toLocaleLowerCase("th");
-                          if (!query) return true;
-
-                          return (
-                            student.display_name.toLocaleLowerCase("th").includes(query) ||
-                            student.name.toLocaleLowerCase("th").includes(query) ||
-                            student.surname.toLocaleLowerCase("th").includes(query) ||
-                            student.number.includes(query)
-                          );
-                        })
-                        .map((student) => {
-                          const fullName = [student.name, student.surname]
-                            .filter(Boolean)
-                            .join(" ");
-                          const selected =
-                            reporterName.trim() === `นรต.${fullName}` &&
-                            reporterPosition.trim() === student.number;
-
-                          return (
-                            <Button
-                              key={`${student.squad}-${student.number}`}
-                              type="button"
-                              size="sm"
-                              variant={selected ? "default" : "outline"}
-                              className="h-auto min-h-9 w-full justify-start whitespace-normal px-3 py-2 text-left text-xs"
-                              onClick={() => selectReporter(student)}
-                            >
-                              {student.display_name}
-                            </Button>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
 
-        <Card
-          className="reveal-stagger rounded-xl"
-          style={{ "--i": 1 } as React.CSSProperties}
-        >
+        <Card className="reveal-stagger rounded-xl" style={{ "--i": 1 } as React.CSSProperties}>
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-base">ยอดสุทธิหลังบันทึก</CardTitle>
           </CardHeader>
@@ -683,263 +809,34 @@ function CompanyPage() {
                 compact
               />
             </div>
-
-            <div className="space-y-1 text-sm">
-              <div className="font-medium text-muted-foreground">รายการจำหน่าย</div>
-              {strengthSummary.items.length > 0 ? (
-                strengthSummary.items.map((item) => (
-                  <div
-                    key={`${item.category}-${item.label}`}
-                    className="rounded-md bg-muted/30 px-3 py-2"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="min-w-0 font-medium">{item.label}</span>
-                      <span className="shrink-0 font-medium">{item.count} นาย</span>
-                    </div>
-                    {item.details.length > 0 && (
-                      <div className="mt-1 space-y-1 text-xs leading-5 text-muted-foreground">
-                        {item.details.map((detail, index) => (
-                          <div
-                            key={`${item.category}-${item.label}-${index}`}
-                            className="break-words"
-                          >
-                            {detail}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-md bg-muted/30 px-3 py-2 text-muted-foreground">
-                  ไม่มีจำหน่าย
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
 
-        {CATEGORY_ORDER.map((category, categoryIndex) => {
-          const list = entries
-            .map((entry, i) => ({ entry, i }))
-            .filter((item) => item.entry.category === category);
-          const hasDateRange = category === "leave" || category === "official";
-          const dateRangeLabel = category === "official" ? "ปฏิบัติราชการ" : "ลา";
-
-          // นับยอดจำหน่ายในหมวดนี้ (รายชื่อ หรือจำนวนที่กรอกไว้สำหรับ "อื่น ๆ")
-          const totalStudents = list.reduce(
-            (sum, { entry }) => sum + countDispatchEntry(entry),
-            0,
-          );
-
-          return (
-            <Card
+        <section
+          className="reveal-stagger grid grid-cols-2 gap-2 min-[430px]:grid-cols-3 sm:grid-cols-5"
+          aria-label="ยอดจำหน่ายแยกตามหัวข้อ"
+        >
+          {CATEGORY_SUMMARY_ITEMS.map(({ category, icon: Icon }) => (
+            <button
               key={category}
-              className={`reveal-stagger card-lift overflow-hidden rounded-xl border-l-4 ${
-                list.length === 0 ? "border-l-border bg-muted/20" : "border-l-primary/50"
-              }`}
-              style={{ "--i": categoryIndex } as React.CSSProperties}
+              type="button"
+              onClick={() => setSelectedCategory(category)}
+              aria-haspopup="dialog"
+              aria-label={`ดูและแก้ไขรายการ${CATEGORY_LABELS[category]} ${strengthSummary.categoryCounts[category]} นาย`}
+              className="min-h-24 rounded-xl border border-border/70 bg-card/95 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
             >
-              <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 pb-3">
-                <div>
-                  <CardTitle className="text-base leading-tight">
-                    {CATEGORY_LABELS[category]}
-                  </CardTitle>
-                  {totalStudents > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">{totalStudents} คน</p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addEntry(category)}
-                  className="h-10 shrink-0"
-                >
-                  <Plus className="h-4 w-4 mr-1" /> เพิ่ม
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3 p-4 pt-0">
-                {list.length === 0 && (
-                  <div className="rounded-md border border-dashed bg-background/60 px-3 py-2 text-sm text-muted-foreground">
-                    ยังไม่มีรายการในหมวดนี้
-                  </div>
-                )}
-                {list.map(({ entry, i }) => (
-                  <div
-                    key={entry.id ?? entry._local}
-                    className="space-y-2 rounded-lg border bg-muted/30 p-3"
-                  >
-                    <>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <textarea
-                          ref={(el) => {
-                            if (el) {
-                              el.style.height = 'auto';
-                              el.style.height = el.scrollHeight + 'px';
-                            }
-                          }}
-                          placeholder="ชื่อ เช่น วิจัย ก."
-                          value={entry.cadet_name}
-                          onChange={(event) => {
-                            updateEntry(i, { cadet_name: event.target.value });
-                            const target = event.target as HTMLTextAreaElement;
-                            target.style.height = 'auto';
-                            target.style.height = target.scrollHeight + 'px';
-                          }}
-                          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm resize-none overflow-hidden"
-                          rows={1}
-                        />
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => removeEntry(i)}
-                          aria-label="ลบรายการ"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-
-                      {filteredStudents.length > 0 && (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowStudentList(prev => ({ ...prev, [i]: !prev[i] }))}
-                            className="w-full"
-                          >
-                            {showStudentList[i] ? (
-                              <>
-                                <ChevronUp className="h-4 w-4 mr-1" />
-                                ซ่อนรายชื่อ
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="h-4 w-4 mr-1" />
-                                แสดงรายชื่อ ({filteredStudents.length} คน)
-                              </>
-                            )}
-                          </Button>
-
-                          {showStudentList[i] && (
-                            <>
-                              <Input
-                                placeholder="ค้นหารายชื่อ..."
-                                value={searchQuery[i] || ''}
-                                onChange={(e) => setSearchQuery(prev => ({ ...prev, [i]: e.target.value }))}
-                                className="text-sm"
-                              />
-                              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto border rounded-md p-2">
-                                {filteredStudents
-                                  .filter(student => {
-                                    const query = (searchQuery[i] || '').toLowerCase();
-                                    if (!query) return true;
-                                    return student.display_name.toLowerCase().includes(query) ||
-                                           student.name.toLowerCase().includes(query) ||
-                                           student.surname.toLowerCase().includes(query) ||
-                                           student.number.includes(query);
-                                  })
-                                  .map((student) => {
-                                    // ตรวจสอบว่านักเรียนคนนี้ถูกจำหน่ายในหมวดอื่นหรือไม่
-                                    const currentEntry = entries[i];
-                                    const otherEntry = entries.find((e, idx) => {
-                                      if (idx === i) return false; // ไม่เช็คตัวเอง
-                                      const names = e.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
-                                      return names.includes(student.display_name);
-                                    });
-
-                                    const currentNames = entry.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
-                                    const selected = currentNames.includes(student.display_name);
-                                    const isInOtherCategory = !!otherEntry;
-                                    const otherCategoryLabel = otherEntry ? CATEGORY_LABELS[otherEntry.category] : '';
-
-                                    return (
-                                      <Button
-                                        key={`${student.squad}-${student.number}`}
-                                        type="button"
-                                        size="sm"
-                                        variant={selected ? "default" : isInOtherCategory ? "secondary" : "outline"}
-                                        onClick={() => {
-                                          const current = entry.cadet_name.trim();
-
-                                          if (selected) {
-                                            // ลบรายชื่อออกจากหมวดนี้
-                                            const filtered = currentNames.filter(n => n !== student.display_name);
-                                            updateEntry(i, { cadet_name: filtered.join(', ') });
-                                          } else if (isInOtherCategory && otherEntry) {
-                                            // ลบออกจากหมวดเดิมและเพิ่มเข้าหมวดใหม่
-                                            const otherIndex = entries.findIndex(e => e === otherEntry);
-                                            const otherNames = otherEntry.cadet_name.split(',').map(n => n.trim()).filter(Boolean);
-                                            const filteredOtherNames = otherNames.filter(n => n !== student.display_name);
-                                            updateEntry(otherIndex, { cadet_name: filteredOtherNames.join(', ') });
-
-                                            // เพิ่มเข้าหมวดใหม่
-                                            const newValue = current ? `${current}, ${student.display_name}` : student.display_name;
-                                            updateEntry(i, { cadet_name: newValue });
-                                          } else {
-                                            // เพิ่มรายชื่อปกติ
-                                            const newValue = current ? `${current}, ${student.display_name}` : student.display_name;
-                                            updateEntry(i, { cadet_name: newValue });
-                                          }
-                                        }}
-                                        className="text-xs h-auto px-2 py-1 whitespace-normal text-left"
-                                        title={student.display_name}
-                                      >
-                                        {student.display_name}
-                                        {isInOtherCategory && !selected && (
-                                          <span className="ml-1 text-[10px] opacity-70">
-                                            (ขณะนี้: จำหน่าย{otherCategoryLabel})
-                                          </span>
-                                        )}
-                                      </Button>
-                                    );
-                                  })}
-                              </div>
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Input
-                          placeholder="สาเหตุ"
-                          value={entry.reason}
-                          onChange={(event) => updateEntry(i, { reason: event.target.value })}
-                        />
-                        <Input
-                          placeholder="สถานที่"
-                          value={entry.location}
-                          onChange={(event) => updateEntry(i, { location: event.target.value })}
-                        />
-                      </div>
-
-                      {category === "other" && splitCadetNames(entry.cadet_name).length > 0 && (
-                        <div className="rounded-md bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                          จำหน่าย {splitCadetNames(entry.cadet_name).length} นาย ตามรายชื่อที่เลือก
-                        </div>
-                      )}
-
-                      {hasDateRange && (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <DispatchDateTimeInput
-                            label={`วันและเวลาเริ่ม${dateRangeLabel}`}
-                            value={parseDispatchPeriod(entry.subcategory).start}
-                            onChange={(value) => updateEntryPeriod(i, "start", value)}
-                          />
-                          <DispatchDateTimeInput
-                            label={`วันและเวลาสิ้นสุด${dateRangeLabel}`}
-                            value={parseDispatchPeriod(entry.subcategory).end}
-                            onChange={(value) => updateEntryPeriod(i, "end", value)}
-                          />
-                        </div>
-                      )}
-                    </>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })}
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Icon className="h-4 w-4 text-primary" />
+                {CATEGORY_LABELS[category]}
+              </div>
+              <div className="mt-3 text-xl font-bold text-foreground">
+                {strengthSummary.categoryCounts[category]}{" "}
+                <span className="text-[11px] font-medium text-muted-foreground">นาย</span>
+              </div>
+              <div className="mt-2 text-[10px] font-medium text-primary/80">กดดูรายละเอียด</div>
+            </button>
+          ))}
+        </section>
 
         <div className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 flex flex-col gap-3 overflow-hidden rounded-xl border border-primary/25 bg-background/90 p-3 shadow-lg backdrop-blur-md sm:bottom-4 sm:flex-row sm:items-center">
           <div className="tiger-stripes pointer-events-none absolute inset-0 opacity-30" />
@@ -964,6 +861,288 @@ function CompanyPage() {
           </Button>
         </div>
       </main>
+
+      <Dialog
+        open={selectedCategory !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCategory(null);
+        }}
+      >
+        {selectedCategory && (
+          <DialogContent className="flex max-h-[92dvh] w-[calc(100%_-_1rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+            <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <DialogTitle>รายละเอียด{CATEGORY_LABELS[selectedCategory]}</DialogTitle>
+                  <DialogDescription className="mt-1">
+                    รวม {strengthSummary.categoryCounts[selectedCategory]} นาย จาก{" "}
+                    {selectedCategoryEntries.length} รายการ
+                  </DialogDescription>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => addEntry(selectedCategory)}
+                  className="mr-8 h-9 shrink-0 sm:mr-6"
+                >
+                  <Plus className="h-4 w-4" />
+                  เพิ่มยอด
+                </Button>
+              </div>
+            </DialogHeader>
+
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-muted/20 p-3 sm:p-4">
+              {selectedCategoryEntries.length === 0 && (
+                <div className="rounded-xl border border-dashed bg-background px-4 py-8 text-center">
+                  <p className="text-sm font-medium">
+                    ยังไม่มีรายการ{CATEGORY_LABELS[selectedCategory]}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    กด “เพิ่มยอด” เพื่อเลือกรายชื่อและกรอกรายละเอียด
+                  </p>
+                </div>
+              )}
+
+              {selectedCategoryEntries.map(({ entry, index: i }, entryPosition) => {
+                const category = entry.category;
+                const hasDateRange = category === "leave" || category === "official";
+                const dateRangeLabel = category === "official" ? "ปฏิบัติราชการ" : "ลา";
+                const selectedNames = splitCadetNames(entry.cadet_name);
+                const query = searchQuery[i] || "";
+                const matchingStudents = query.trim()
+                  ? filteredStudents
+                      .map((student) => ({
+                        student,
+                        score: getStudentSearchScore(student, query),
+                      }))
+                      .filter(({ score }) => Number.isFinite(score))
+                      .sort(
+                        (first, second) =>
+                          first.score - second.score ||
+                          Number(first.student.number) - Number(second.student.number),
+                      )
+                      .slice(0, 10)
+                  : [];
+
+                return (
+                  <section
+                    key={entry.id ?? entry._local ?? `${category}-${i}`}
+                    className="overflow-hidden rounded-xl border bg-card shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">รายการที่ {entryPosition + 1}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {countDispatchEntry(entry)} นาย
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (
+                            window.confirm(`ยืนยันการลบยอด${CATEGORY_LABELS[category]}นี้หรือไม่`)
+                          ) {
+                            removeEntry(i);
+                          }
+                        }}
+                        className="h-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`ลบยอด${CATEGORY_LABELS[category]}รายการที่ ${entryPosition + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        ลบยอด
+                      </Button>
+                    </div>
+
+                    <div className="space-y-3 p-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs">รายชื่อที่จำหน่าย</Label>
+                        {selectedNames.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5" aria-label="รายชื่อที่เลือก">
+                            {selectedNames.map((name) => (
+                              <button
+                                key={name}
+                                type="button"
+                                onClick={() => toggleStudentInEntry(i, name)}
+                                className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-left text-xs text-primary transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                aria-label={`นำ ${name} ออกจากรายการ`}
+                                title="กดเพื่อนำรายชื่อออก"
+                              >
+                                <span>{name}</span>
+                                <X className="h-3 w-3 shrink-0" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">ยังไม่ได้เลือกรายชื่อ</p>
+                        )}
+
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            type="search"
+                            autoComplete="off"
+                            aria-label={`ค้นหารายชื่อเพื่อเพิ่มในยอด${CATEGORY_LABELS[category]}`}
+                            placeholder="ค้นหาชื่อ นามสกุล เลขที่ หรืออักษรย่อ..."
+                            value={query}
+                            onChange={(event) =>
+                              setSearchQuery((previous) => ({
+                                ...previous,
+                                [i]: event.target.value,
+                              }))
+                            }
+                            className="pl-9 text-sm"
+                          />
+                        </div>
+
+                        {query.trim() && (
+                          <div className="max-h-48 overflow-y-auto rounded-md border bg-background p-1.5 shadow-sm">
+                            {matchingStudents.map(({ student }) => {
+                              const otherEntry = entries.reduce<EntryRow | null>(
+                                (found, candidate, candidateIndex) => {
+                                  if (candidateIndex === i) return found;
+                                  return splitCadetNames(candidate.cadet_name).some((name) =>
+                                    cadetNamesMatch(name, student.display_name),
+                                  )
+                                    ? candidate
+                                    : found;
+                                },
+                                null,
+                              );
+                              const isSelected = selectedNames.some((name) =>
+                                cadetNamesMatch(name, student.display_name),
+                              );
+                              const otherCategoryLabel = otherEntry
+                                ? CATEGORY_LABELS[otherEntry.category]
+                                : "";
+
+                              return (
+                                <Button
+                                  key={`${student.squad}-${student.number}`}
+                                  type="button"
+                                  size="sm"
+                                  variant={
+                                    isSelected ? "default" : otherEntry ? "secondary" : "outline"
+                                  }
+                                  onClick={() => {
+                                    toggleStudentInEntry(i, student.display_name);
+                                    setSearchQuery((previous) => ({ ...previous, [i]: "" }));
+                                  }}
+                                  className="mb-1 h-auto w-full justify-start whitespace-normal px-2.5 py-2 text-left text-xs last:mb-0"
+                                >
+                                  <span>{student.display_name}</span>
+                                  {otherEntry && (
+                                    <span className="ml-1 text-[10px] opacity-70">
+                                      จำหน่าย: {otherCategoryLabel} (กดเพื่อย้าย)
+                                    </span>
+                                  )}
+                                </Button>
+                              );
+                            })}
+                            {matchingStudents.length === 0 && (
+                              <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                                ไม่พบรายชื่อที่ใกล้เคียง
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`reason-${i}`} className="text-xs">
+                            ไปทำอะไร / สาเหตุ
+                          </Label>
+                          <Input
+                            id={`reason-${i}`}
+                            placeholder="ระบุสาเหตุหรือภารกิจ"
+                            value={entry.reason}
+                            onChange={(event) => updateEntry(i, { reason: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`location-${i}`} className="text-xs">
+                            สถานที่
+                          </Label>
+                          <Input
+                            id={`location-${i}`}
+                            placeholder="ระบุสถานที่"
+                            value={entry.location}
+                            onChange={(event) => updateEntry(i, { location: event.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      {category === "sick" && (
+                        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
+                          <Checkbox
+                            checked={isMedicalAdmissionEntry(entry)}
+                            onCheckedChange={(checked) =>
+                              updateEntryMedicalAdmission(i, checked === true)
+                            }
+                            aria-label="แอดมิตกองแพทย์"
+                          />
+                          <span>
+                            <span className="block font-medium">แอดมิตกองแพทย์</span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              จำหน่ายต่อเนื่องทุกแถวรายงานจนกว่าจะลบยอดนี้ออก
+                            </span>
+                          </span>
+                        </label>
+                      )}
+
+                      {category === "other" && (
+                        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
+                          <Checkbox
+                            checked={isDutyAssignmentEntry(entry)}
+                            onCheckedChange={(checked) =>
+                              updateEntryDutyAssignment(i, checked === true)
+                            }
+                            aria-label="ปฏิบัติหน้าที่"
+                          />
+                          <span>
+                            <span className="block font-medium">ปฏิบัติหน้าที่</span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              จำหน่ายต่อเนื่องจนถึงแถว 07.30 น. ของวันถัดไป
+                              และหยุดอัตโนมัติในแถวถัดจากนั้น
+                            </span>
+                          </span>
+                        </label>
+                      )}
+
+                      {hasDateRange && (
+                        <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
+                          <DispatchDateTimeInput
+                            label={`วันและเวลาเริ่ม${dateRangeLabel}`}
+                            value={parseDispatchPeriod(entry.subcategory).start}
+                            onChange={(value) => updateEntryPeriod(i, "start", value)}
+                          />
+                          <DispatchDateTimeInput
+                            label={`วันและเวลาสิ้นสุด${dateRangeLabel}`}
+                            value={parseDispatchPeriod(entry.subcategory).end}
+                            onChange={(value) => updateEntryPeriod(i, "end", value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t bg-background px-4 py-3 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setSelectedCategory(null)}>
+                ปิด
+              </Button>
+              <Button type="button" onClick={handleSave} disabled={save.isPending}>
+                {save.isPending ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
+              </Button>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }

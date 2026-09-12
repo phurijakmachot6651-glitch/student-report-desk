@@ -8,6 +8,7 @@ const ROW_META_ORDER_BASE = -1000000;
 
 export type StoredDispatchEntry = Entry & {
   id?: string;
+  created_at?: string | null;
   display_order?: number | null;
 };
 

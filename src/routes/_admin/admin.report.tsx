@@ -11,20 +11,27 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
+  buildHomeLeaveReportText,
   buildReportText,
   buildStretchExerciseReportText,
   parseISODate,
   todayISO,
   type Entry,
 } from "@/lib/thai";
-import { DEFAULT_REPORT_TIME, getReportRow, normalizeReportTime } from "@/lib/report-rows";
+import {
+  DEFAULT_REPORT_TIME,
+  getReportRowFromReports,
+  normalizeReportTime,
+  type StoredDailyReport,
+} from "@/lib/report-rows";
 import { fetchActiveReportTime, fetchReportTimes } from "@/lib/report-settings";
+import { mergeActiveContinuingEntries } from "@/lib/continuing-dispatch";
 
 export const Route = createFileRoute("/_admin/admin/report")({
   component: ReportPage,
 });
 
-type ReportTemplate = "strength" | "stretchExercise";
+type ReportTemplate = "strength" | "stretchExercise" | "homeLeave";
 
 type ReporterFields = {
   selectedReporter: string;
@@ -34,6 +41,8 @@ type ReporterFields = {
 
 const COMPANY_REPORT_HEADER =
   "กองร้อยที่ ๔ ฝ่ายปกครอง ๑\nกองบังคับการปกครอง\n(นักเรียนนายร้อยตำรวจชั้นปีที่ ๔)";
+const REPORT_HOURS = Array.from({ length: 24 }, (_, index) => String(index).padStart(2, "0"));
+const REPORT_MINUTES = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 
 const DEFAULT_REPORTER_FIELDS: Record<ReportTemplate, ReporterFields> = {
   strength: {
@@ -46,11 +55,18 @@ const DEFAULT_REPORTER_FIELDS: Record<ReportTemplate, ReporterFields> = {
     reporterName: "นรต.อังกูร เทพหัสดินทร์ ณ อยุธยา",
     reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๔ ปค.๑ บก.ปค.",
   },
+  homeLeave: {
+    selectedReporter: "",
+    reporterName: "นรต.ภูริจักษ์ มาโชติ",
+    reporterPosition: "ผู้ช่วย ผบ.มว.ร้อย ๔ ปค.๑ บก.ปค.",
+  },
 };
 
 function ReportPage() {
   const [date, setDate] = useState(todayISO());
   const [selectedReportTimeInput, setSelectedReportTimeInput] = useState<string | null>(null);
+  const [homeLeaveHour, setHomeLeaveHour] = useState("16");
+  const [homeLeaveMinute, setHomeLeaveMinute] = useState("00");
   const [reportTemplate, setReportTemplate] = useState<ReportTemplate>("strength");
   const [reporterFieldsByTemplate, setReporterFieldsByTemplate] =
     useState<Record<ReportTemplate, ReporterFields>>(DEFAULT_REPORTER_FIELDS);
@@ -100,9 +116,10 @@ function ReportPage() {
         supabase
           .from("daily_reports")
           .select(
-            "id,report_time,reporter_name,reporter_position,dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
+            "id,company_id,report_date,report_time,reporter_name,reporter_position,dispatch_entries(category,cadet_name,reason,location,subcategory,count,display_order)",
           )
-          .eq("report_date", date),
+          .lte("report_date", date)
+          .order("report_date", { ascending: true }),
       ]);
       if (companiesResult.error) throw companiesResult.error;
       if (reportsResult.error) throw reportsResult.error;
@@ -132,11 +149,20 @@ function ReportPage() {
       0,
     );
 
-    data.reports.forEach((report) => {
-      const row = getReportRow(report, selectedReportTime);
-      if (!row) return;
+    data.companies.forEach((company) => {
+      const companyReports = data.reports.filter(
+        (report) => report.company_id === company.id,
+      ) as StoredDailyReport[];
+      const currentReports = companyReports.filter((report) => report.report_date === date);
+      const row = getReportRowFromReports(currentReports, selectedReportTime)?.row || null;
+      const activeEntries = mergeActiveContinuingEntries(
+        companyReports,
+        row?.entries || [],
+        date,
+        selectedReportTime,
+      );
 
-      row.entries.forEach((entry: Entry) => {
+      activeEntries.forEach((entry: Entry) => {
         entries.push({
           category: entry.category,
           cadet_name: entry.cadet_name,
@@ -170,8 +196,24 @@ function ReportPage() {
     [date, reporterName, reporterPosition],
   );
 
+  const homeLeaveReportText = useMemo(
+    () =>
+      buildHomeLeaveReportText({
+        companyName: COMPANY_REPORT_HEADER,
+        reportDate: parseISODate(date),
+        reporterName: reporterName || "-",
+        reporterPosition: reporterPosition || "-",
+        reportTime: `${homeLeaveHour}:${homeLeaveMinute}`,
+      }),
+    [date, homeLeaveHour, homeLeaveMinute, reporterName, reporterPosition],
+  );
+
   const fullText =
-    reportTemplate === "stretchExercise" ? stretchExerciseReportText : strengthReportText;
+    reportTemplate === "stretchExercise"
+      ? stretchExerciseReportText
+      : reportTemplate === "homeLeave"
+        ? homeLeaveReportText
+        : strengthReportText;
 
   const copy = async () => {
     await navigator.clipboard.writeText(fullText);
@@ -186,7 +228,9 @@ function ReportPage() {
     a.download =
       reportTemplate === "stretchExercise"
         ? `stretch-exercise-report-${date}.txt`
-        : `report-${date}.txt`;
+        : reportTemplate === "homeLeave"
+          ? `home-leave-report-${date}.txt`
+          : `report-${date}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -205,7 +249,7 @@ function ReportPage() {
               if (value) setReportTemplate(value as ReportTemplate);
             }}
           >
-            <TabsList className="grid h-auto w-full grid-cols-2">
+            <TabsList className="grid h-auto w-full grid-cols-3">
               <TabsTrigger
                 value="strength"
                 className="min-h-9 whitespace-normal px-2 py-1.5 text-center leading-tight"
@@ -218,12 +262,18 @@ function ReportPage() {
               >
                 ยืดเหยียดและออกกำลังกาย
               </TabsTrigger>
+              <TabsTrigger
+                value="homeLeave"
+                className="min-h-9 whitespace-normal px-2 py-1.5 text-center leading-tight"
+              >
+                ปล่อยพักบ้าน
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div
             className={`grid gap-3 items-end ${
-              reportTemplate === "strength" ? "sm:grid-cols-3" : "sm:grid-cols-2"
+              reportTemplate === "stretchExercise" ? "sm:grid-cols-2" : "sm:grid-cols-3"
             }`}
           >
             <div>
@@ -249,6 +299,38 @@ function ReportPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+            ) : reportTemplate === "homeLeave" ? (
+              <div>
+                <Label>เวลาปล่อยพักบ้าน</Label>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] items-center gap-2">
+                  <select
+                    aria-label="ชั่วโมงปล่อยพักบ้าน"
+                    value={homeLeaveHour}
+                    onChange={(event) => setHomeLeaveHour(event.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-center text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+                  >
+                    {REPORT_HOURS.map((hour) => (
+                      <option key={hour} value={hour}>
+                        {hour}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="font-semibold text-muted-foreground">.</span>
+                  <select
+                    aria-label="นาทีปล่อยพักบ้าน"
+                    value={homeLeaveMinute}
+                    onChange={(event) => setHomeLeaveMinute(event.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-center text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+                  >
+                    {REPORT_MINUTES.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-sm text-muted-foreground">น.</span>
+                </div>
               </div>
             ) : null}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">

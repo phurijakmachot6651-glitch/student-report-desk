@@ -8,7 +8,7 @@
 **ระบบจัดทำยอดกำลังพล นรต. กองร้อยที่ ๒**
 (Police Cadet Strength Report System — Company 2)
 
-- **URL ระบบ:** https://student-report-desk.vercel.app
+- **URL ระบบ:** https://student-report-desk-neon.vercel.app
 - **Repository:** https://github.com/POND/student-report-desk
 
 ---
