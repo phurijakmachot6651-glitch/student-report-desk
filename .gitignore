@@ -34,3 +34,7 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Local browser/test artifacts
+.chrome-mobile-login-check/
+mobile-login-check.png

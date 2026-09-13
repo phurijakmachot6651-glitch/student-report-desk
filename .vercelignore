@@ -1,0 +1,14 @@
+# Local browser/test artifacts; never send these to a deployment.
+.chrome-mobile-login-check/
+mobile-login-check.png
+
+# Local-only build and tooling output.
+.git/
+.vercel/
+node_modules/
+dist/
+dist-ssr/
+.tanstack/
+.nitro/
+.wrangler/
+*.log
