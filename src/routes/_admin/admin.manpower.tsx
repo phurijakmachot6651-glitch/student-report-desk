@@ -412,14 +412,25 @@ function PeriodField({
     <div className="manpower-period-editor flex min-h-[4.25rem] flex-col gap-1 p-1">
       <select
         value={mode}
-        onChange={(event) =>
-          updatePeriod({ periodMode: event.target.value as ManpowerSheetEntry["periodMode"] })
-        }
+        onChange={(event) => {
+          const nextMode = event.target.value as ManpowerSheetEntry["periodMode"];
+          updatePeriod({
+            periodMode: nextMode,
+            category: nextMode === "medical-admission" ? "sick" : entry.category,
+            ...(nextMode === "medical-admission"
+              ? {
+                  periodEndTime: "",
+                  periodEndDate: entry.periodStartDate || entry.periodEndDate,
+                }
+              : {}),
+          });
+        }}
         className="h-7 w-full rounded border border-slate-300 bg-transparent px-1 text-center text-[12px] dark:border-slate-600"
         aria-label="รูปแบบวันและเวลา"
       >
         <option value="same-day">ลาภายในวันเดียวกัน</option>
         <option value="cross-day">ลาข้ามวัน</option>
+        <option value="medical-admission">ป่วยแอดมิท</option>
       </select>
 
       <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-1">
@@ -429,7 +440,7 @@ function PeriodField({
           value={entry.periodStartTime || ""}
           onChange={(value) => updatePeriod({ periodStartTime: value })}
         />
-        {mode === "cross-day" && (
+        {mode !== "same-day" && (
           <PeriodDateField
             label="วันที่เริ่ม"
             value={entry.periodStartDate || ""}
@@ -437,22 +448,30 @@ function PeriodField({
           />
         )}
 
-        <span className="text-[11px]">ถึง</span>
-        <PeriodTimeField
-          label="เวลาสิ้นสุด"
-          value={entry.periodEndTime || ""}
-          onChange={(value) => updatePeriod({ periodEndTime: value })}
-        />
+        {mode === "medical-admission" ? (
+          <div className="col-span-2 rounded border border-dashed border-amber-400/70 bg-amber-50/70 px-1.5 py-1 text-[10px] leading-tight text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+            มีผลต่อเนื่องจนกว่าจะจำหน่าย
+          </div>
+        ) : (
+          <>
+            <span className="text-[11px]">ถึง</span>
+            <PeriodTimeField
+              label="เวลาสิ้นสุด"
+              value={entry.periodEndTime || ""}
+              onChange={(value) => updatePeriod({ periodEndTime: value })}
+            />
 
-        <PeriodDateField
-          label={mode === "same-day" ? "วันที่ลา" : "วันที่สิ้นสุด"}
-          value={mode === "same-day" ? entry.periodStartDate || "" : entry.periodEndDate || ""}
-          onChange={(value) =>
-            updatePeriod(
-              mode === "same-day" ? { periodStartDate: value } : { periodEndDate: value },
-            )
-          }
-        />
+            <PeriodDateField
+              label={mode === "same-day" ? "วันที่ลา" : "วันที่สิ้นสุด"}
+              value={mode === "same-day" ? entry.periodStartDate || "" : entry.periodEndDate || ""}
+              onChange={(value) =>
+                updatePeriod(
+                  mode === "same-day" ? { periodStartDate: value } : { periodEndDate: value },
+                )
+              }
+            />
+          </>
+        )}
       </div>
 
       {entry.period && (
@@ -560,18 +579,26 @@ function ManpowerSheetPage() {
     if (entries.length === 0) return false;
     setData((current) => {
       const nextEntries = [...current.entries];
+      const claimedIndexes = new Set<number>();
       entries.forEach((imported) => {
         const matchingIndex = nextEntries.findIndex(
-          (entry) =>
-            (imported.studentId && entry.studentId === imported.studentId) ||
-            (entry.name.trim() && entry.name.trim() === imported.name.trim()),
+          (entry, index) =>
+            !claimedIndexes.has(index) &&
+            Boolean(
+              (imported.studentId && entry.studentId === imported.studentId) ||
+              (entry.name.trim() && entry.name.trim() === imported.name.trim()),
+            ),
         );
-        const emptyIndex = nextEntries.findIndex((entry) => !isManpowerEntryFilled(entry));
+        const emptyIndex = nextEntries.findIndex(
+          (entry, index) => !claimedIndexes.has(index) && !isManpowerEntryFilled(entry),
+        );
         const targetIndex = matchingIndex >= 0 ? matchingIndex : emptyIndex;
         if (targetIndex < 0) {
           nextEntries.push({ ...imported, id: crypto.randomUUID() });
+          claimedIndexes.add(nextEntries.length - 1);
           return;
         }
+        claimedIndexes.add(targetIndex);
         const currentEntry = nextEntries[targetIndex];
         if (!isManpowerEntryFilled(currentEntry)) {
           nextEntries[targetIndex] = { ...imported, id: currentEntry.id };
@@ -607,6 +634,12 @@ function ManpowerSheetPage() {
   const classifyImportText = (source = importText, quiet = false) => {
     const entries = parseManpowerImportText(source, reportDate);
     const applied = applyImportedEntries(entries);
+    if (applied) {
+      // จำแนกเสร็จแล้วล้างกล่องนำเข้า เพื่อพร้อมรับข้อมูลชุดถัดไปและไม่ให้
+      // ข้อความชุดเดิมถูกนำมาปนซ้ำโดยไม่ตั้งใจ
+      setImportText("");
+      setImportedFiles([]);
+    }
     if (!quiet) {
       if (applied) toast.success(`จำแนกข้อมูลลงตาราง ${toThaiDigits(entries.length)} รายการแล้ว`);
       else toast.error("ไม่พบชื่อที่จำแนกได้ กรุณาตรวจข้อความหรือกรอกตารางด้วยตนเอง");

@@ -9,7 +9,8 @@ export type ManpowerSignature = {
 };
 
 export type ManpowerCategory = "official" | "leave" | "sick" | "absent" | "other";
-export type ManpowerPeriodMode = "same-day" | "cross-day";
+/** รูปแบบช่วงเวลาที่แสดงในแบบฟอร์มกำลังพล */
+export type ManpowerPeriodMode = "same-day" | "cross-day" | "medical-admission";
 
 export type ManpowerSheetEntry = {
   id: string;
@@ -91,9 +92,17 @@ function formatPeriodDate(value: string): string {
 /** Build the exact Thai leave-period sentence used in Word, PDF and JPG exports. */
 export function formatManpowerPeriod(entry: ManpowerSheetEntry): string {
   const startTime = formatPeriodTime(entry.periodStartTime || "");
-  const endTime = formatPeriodTime(entry.periodEndTime || "");
   const startDate = formatPeriodDate(entry.periodStartDate || "");
-  if (!startTime || !endTime || !startDate) return "";
+  if (!startTime || !startDate) return "";
+
+  // ผู้ป่วยแอดมิทใช้เฉพาะเวลาเริ่มต้นและมีผลต่อเนื่องจนกว่าจะจำหน่าย
+  // จึงไม่ควรบังคับให้กรอกเวลา/วันที่สิ้นสุดเหมือนการลาภายในวันเดียวกัน
+  if (entry.periodMode === "medical-admission") {
+    return `ตั้งแต่เวลา ${startTime} น.\nของ${startDate}`;
+  }
+
+  const endTime = formatPeriodTime(entry.periodEndTime || "");
+  if (!endTime) return "";
 
   if ((entry.periodMode || "same-day") === "same-day") {
     return `ตั้งแต่เวลา ${startTime} น.\nถึงเวลา ${endTime} น.\nของ${startDate}`;

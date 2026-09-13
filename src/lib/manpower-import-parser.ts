@@ -62,6 +62,9 @@ function fallbackStudentName(source: string): string {
 }
 
 function detectCategory(source: string): ManpowerCategory {
+  // คำว่าแอดมิทเป็นกรณีป่วยต่อเนื่องโดยเฉพาะ แม้ข้อความขออนุญาตจะมีคำว่า
+  // "ออกนอกบริเวณ" ปนอยู่ จึงต้องตรวจให้มาก่อนหมวดลา
+  if (/(?:ป่วย\s*)?แอดมิท|นอนโรงพยาบาล|รับไว้รักษา(?:ตัว)?/u.test(source)) return "sick";
   if (/ขออนุญาตออกนอก|ออกนอกบริเวณ|ลากิจ|ลาพัก|ขอลา/u.test(source)) return "leave";
   if (/ไปราชการ|ปฏิบัติราชการ|ราชการ/u.test(source)) return "official";
   if (/ขาด|ไม่มารายงานตัว|ไม่มาปฏิบัติ/u.test(source)) return "absent";
@@ -132,7 +135,10 @@ function extractPeriod(source: string, reportDate: string): Partial<ManpowerShee
   const timeMatches = Array.from(
     normalized.matchAll(/(?:ตั้งแต่|ถึง)?\s*เวลา\s*([๐-๙0-9]{1,2})[.:]([๐-๙0-9]{2})\s*น\.?/gu),
   );
-  if (timeMatches.length < 2) return {};
+  const medicalAdmission = /(?:ป่วย\s*)?แอดมิท|นอนโรงพยาบาล|รับไว้รักษา(?:ตัว)?/u.test(normalized);
+  // ข้อความป่วยแอดมิทมีเวลาเริ่มต้นเพียงค่าเดียว ส่วนการลา/ราชการต้องมี
+  // เวลาเริ่มและเวลาสิ้นสุดสองค่าเหมือนเดิม
+  if (timeMatches.length < (medicalAdmission ? 1 : 2)) return {};
 
   const fallbackYear = Number(reportDate.slice(0, 4)) || new Date().getFullYear();
   const datePattern = new RegExp(
@@ -149,12 +155,14 @@ function extractPeriod(source: string, reportDate: string): Partial<ManpowerShee
   if (dates.length === 0) return {};
 
   const firstTime = `${toArabicDigits(timeMatches[0][1]).padStart(2, "0")}:${toArabicDigits(timeMatches[0][2]).padStart(2, "0")}`;
-  const secondTime = `${toArabicDigits(timeMatches[1][1]).padStart(2, "0")}:${toArabicDigits(timeMatches[1][2]).padStart(2, "0")}`;
-  const crossDay = dates.length >= 2;
+  const secondTime = timeMatches[1]
+    ? `${toArabicDigits(timeMatches[1][1]).padStart(2, "0")}:${toArabicDigits(timeMatches[1][2]).padStart(2, "0")}`
+    : "";
+  const crossDay = !medicalAdmission && dates.length >= 2;
   const startDate = resolveDate(crossDay ? dates[0] : dates[dates.length - 1]);
   const endDate = crossDay ? resolveDate(dates[1], startDate) : startDate;
   const partial: Partial<ManpowerSheetEntry> = {
-    periodMode: crossDay ? "cross-day" : "same-day",
+    periodMode: medicalAdmission ? "medical-admission" : crossDay ? "cross-day" : "same-day",
     periodStartTime: firstTime,
     periodEndTime: secondTime,
     periodStartDate: toISODate(startDate),
@@ -192,9 +200,19 @@ function parseSegment(source: string, reportDate: string): ParsedManpowerEntry |
 export function parseManpowerImportText(value: string, reportDate: string): ParsedManpowerEntry[] {
   const source = normalizeText(value);
   if (!source) return [];
-  const rosterMarkerIndexes = studentsData
-    .map((student) => source.indexOf(`นรต.${student.name} ${student.surname}`.trim()))
-    .filter((index) => index >= 0);
+  // ใช้ marker ทุกครั้งที่พบชื่อ ไม่ใช่ indexOf ครั้งเดียวต่อคน เพราะข้อความที่
+  // วางจากเอกสาร/ OCR อาจมีมากกว่า 20 รายการ หรือมีคนเดิมซ้ำในคนละรายการ
+  const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const rosterNames = studentsData
+    .map((student) => `${student.name} ${student.surname}`.trim())
+    .filter(Boolean)
+    .sort((first, second) => second.length - first.length)
+    .map(escapeRegExp);
+  const rosterMarkerIndexes = rosterNames.length
+    ? Array.from(source.matchAll(new RegExp(`นรต\\.?\\s*(?:${rosterNames.join("|")})`, "gu"))).map(
+        (match) => match.index || 0,
+      )
+    : [];
   const lineMarkerIndexes = Array.from(source.matchAll(/(?:^|\n)\s*นรต\.?\s*(?=[ก-ฮ])/gu)).map(
     (marker) => (marker.index || 0) + marker[0].indexOf("นรต"),
   );
@@ -209,7 +227,24 @@ export function parseManpowerImportText(value: string, reportDate: string): Pars
   const parsed = segments
     .map((segment) => parseSegment(segment, reportDate))
     .filter((entry): entry is ParsedManpowerEntry => Boolean(entry));
-  return Array.from(
-    new Map(parsed.map((entry) => [entry.studentId || entry.name, entry])).values(),
-  );
+  // ตัดเฉพาะข้อความซ้ำแบบเหมือนกันทุกช่อง ไม่รวมด้วย studentId อย่างเดียว
+  // เพื่อไม่ให้รายการของคนเดียวกันคนละเหตุผล/คนละเวลาโดนทับกัน
+  const unique = new Map<string, ParsedManpowerEntry>();
+  parsed.forEach((entry) => {
+    const key = [
+      entry.studentId,
+      entry.name,
+      entry.category,
+      entry.detail,
+      entry.period,
+      entry.periodMode,
+      entry.periodStartTime,
+      entry.periodEndTime,
+      entry.periodStartDate,
+      entry.periodEndDate,
+      entry.note,
+    ].join("\u0000");
+    if (!unique.has(key)) unique.set(key, entry);
+  });
+  return [...unique.values()];
 }
