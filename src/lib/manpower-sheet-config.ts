@@ -12,6 +12,11 @@ export type ManpowerCategory = "official" | "leave" | "sick" | "absent" | "other
 /** รูปแบบช่วงเวลาที่แสดงในแบบฟอร์มกำลังพล */
 export type ManpowerPeriodMode = "same-day" | "cross-day" | "medical-admission";
 
+/** ค่าเริ่มต้นตัวอย่างที่ใช้เติมแถวใหม่ของแบบฟอร์มใบกำลังพล */
+export const MANPOWER_DEFAULT_PERIOD_MODE: ManpowerPeriodMode = "medical-admission";
+export const MANPOWER_DEFAULT_PERIOD_START_TIME = "13:00";
+export const MANPOWER_DEFAULT_PERIOD_START_DATE = "2026-09-04";
+
 export type ManpowerSheetEntry = {
   id: string;
   studentId: string;
@@ -95,7 +100,7 @@ export function formatManpowerPeriod(entry: ManpowerSheetEntry): string {
   const startDate = formatPeriodDate(entry.periodStartDate || "");
   if (!startTime || !startDate) return "";
 
-  // ผู้ป่วยแอดมิทใช้เฉพาะเวลาเริ่มต้นและมีผลต่อเนื่องจนกว่าจะจำหน่าย
+  // ผู้ป่วยแอดมิทใช้เฉพาะเวลาเริ่มต้นและมีผลต่อเนื่องจนกว่าจะลบยอดจำหน่าย
   // จึงไม่ควรบังคับให้กรอกเวลา/วันที่สิ้นสุดเหมือนการลาภายในวันเดียวกัน
   if (entry.periodMode === "medical-admission") {
     return `ตั้งแต่เวลา ${startTime} น.\nของ${startDate}`;
@@ -111,6 +116,31 @@ export function formatManpowerPeriod(entry: ManpowerSheetEntry): string {
   const endDate = formatPeriodDate(entry.periodEndDate || "");
   if (!endDate) return "";
   return `ตั้งแต่เวลา ${startTime} น.\nของ${startDate}\nถึงเวลา ${endTime} น.\nของ${endDate}`;
+}
+
+/**
+ * Return the period that should be shown/exported for an entry.
+ *
+ * Structured date/time fields are the source of truth whenever they exist.
+ * This keeps the preview in sync with the selectors and prevents an old
+ * free-form `period` string from remaining visible after a selector changes.
+ * Entries created by older drafts that have no structured fields still retain
+ * their legacy text until the user edits one of the selectors.
+ */
+export function getManpowerEntryPeriod(entry: ManpowerSheetEntry): string {
+  const hasStructuredPeriod = Boolean(
+    entry.periodStartTime || entry.periodEndTime || entry.periodStartDate || entry.periodEndDate,
+  );
+  const formattedPeriod = hasStructuredPeriod ? formatManpowerPeriod(entry) : "";
+  if (formattedPeriod) return formattedPeriod;
+
+  // Keep periods from older drafts that were stored as free-form text. Once a
+  // user starts editing a structured time, `updatePeriod` clears the stale
+  // text, so a cleared selector never resurrects the old value.
+  if (!entry.periodStartTime && !entry.periodEndTime && entry.period.trim()) {
+    return entry.period.trim();
+  }
+  return "";
 }
 
 export const MANPOWER_REPORTER_SIGNATURE_PATH = "/manpower/reporter-signature.png";
@@ -167,13 +197,20 @@ export const MANPOWER_SIGNATURES: ManpowerSignature[] = [
 ];
 
 export function isManpowerEntryFilled(entry: ManpowerSheetEntry): boolean {
-  return Boolean(
-    entry.name.trim() ||
-    entry.squadNumber.trim() ||
-    entry.detail.trim() ||
-    entry.period.trim() ||
-    entry.note.trim(),
+  // A row is meaningful when it has a person or any manually entered detail.
+  // Structured date/time defaults are not enough on their own; otherwise the
+  // sample period shown in a new row would inflate the dispatched total.
+  const hasPersonOrDetails = Boolean(
+    entry.name.trim() || entry.squadNumber.trim() || entry.detail.trim() || entry.note.trim(),
   );
+  if (hasPersonOrDetails) return true;
+
+  // Older drafts may contain only a free-form period and no structured fields.
+  // Keep those rows compatible while ignoring generated/placeholder periods.
+  const hasStructuredPeriod = Boolean(
+    entry.periodStartTime || entry.periodEndTime || entry.periodStartDate || entry.periodEndDate,
+  );
+  return !hasStructuredPeriod && Boolean(entry.period.trim());
 }
 
 export function summarizeManpowerEntries(entries: ManpowerSheetEntry[]) {

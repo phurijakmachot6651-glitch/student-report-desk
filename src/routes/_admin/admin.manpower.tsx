@@ -37,9 +37,13 @@ import {
   MANPOWER_CATEGORIES,
   MANPOWER_CATEGORY_LABELS,
   MANPOWER_COMPANY_COMMANDER_SIGNATURE_PATH,
+  MANPOWER_DEFAULT_PERIOD_MODE,
+  MANPOWER_DEFAULT_PERIOD_START_DATE,
+  MANPOWER_DEFAULT_PERIOD_START_TIME,
   MANPOWER_REPORTER_SIGNATURE_PATH,
   MANPOWER_SIGNATURES,
   formatManpowerPeriod,
+  getManpowerEntryPeriod,
   isManpowerEntryFilled,
   manpowerSheetFilename,
   summarizeManpowerEntries,
@@ -71,7 +75,9 @@ const THAI_SHORT_MONTHS = [
   "ธ.ค.",
 ];
 
-function createEmptyEntry(defaultDate = todayISO()): ManpowerSheetEntry {
+// ใช้ค่าตัวอย่างจากแบบฟอร์มต้นฉบับเป็นค่าเริ่มต้นเท่านั้น ผู้ใช้ยังเลือก
+// วันและเวลาใหม่ได้จากช่องเลือกในแต่ละแถว โดยไม่ผูกกับวันที่ตัวอย่างนี้
+function createEmptyEntry(defaultDate = MANPOWER_DEFAULT_PERIOD_START_DATE): ManpowerSheetEntry {
   return {
     id: crypto.randomUUID(),
     studentId: "",
@@ -79,12 +85,15 @@ function createEmptyEntry(defaultDate = todayISO()): ManpowerSheetEntry {
     squadNumber: "",
     category: "sick",
     detail: "",
+    // เก็บข้อความช่วงเวลาเป็นค่าว่างไว้ก่อน ค่าเริ่มต้นจะแสดงจากฟิลด์
+    // วัน/เวลาแบบมีโครงสร้าง และจะไม่ถูกนับเป็นข้อมูลที่กรอกแล้วหรือขวางการนำเข้า
     period: "",
-    periodMode: "same-day",
-    periodStartTime: "",
+    // ค่าเริ่มต้นตามตัวอย่างในเอกสาร (ผู้ใช้แก้ไขได้จาก select ทุกช่อง)
+    periodMode: MANPOWER_DEFAULT_PERIOD_MODE,
+    periodStartTime: MANPOWER_DEFAULT_PERIOD_START_TIME,
     periodEndTime: "",
-    periodStartDate: defaultDate,
-    periodEndDate: defaultDate,
+    periodStartDate: defaultDate || MANPOWER_DEFAULT_PERIOD_START_DATE,
+    periodEndDate: defaultDate || MANPOWER_DEFAULT_PERIOD_START_DATE,
     note: "",
   };
 }
@@ -450,7 +459,7 @@ function PeriodField({
 
         {mode === "medical-admission" ? (
           <div className="col-span-2 rounded border border-dashed border-amber-400/70 bg-amber-50/70 px-1.5 py-1 text-[10px] leading-tight text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
-            มีผลต่อเนื่องจนกว่าจะจำหน่าย
+            มีผลต่อเนื่องจนกว่าจะลบยอดจำหน่าย
           </div>
         ) : (
           <>
@@ -474,9 +483,9 @@ function PeriodField({
         )}
       </div>
 
-      {entry.period && (
+      {getManpowerEntryPeriod(entry) && (
         <span className="whitespace-pre-line border-t border-dashed border-slate-300 pt-1 text-[10px] leading-tight dark:border-slate-600">
-          {toThaiDigits(entry.period)}
+          {toThaiDigits(getManpowerEntryPeriod(entry))}
         </span>
       )}
     </div>
@@ -1179,9 +1188,7 @@ function ManpowerSheetPage() {
                   variant="outline"
                   size="sm"
                   className="text-[14px]"
-                  onClick={() =>
-                    updateData("entries", [...data.entries, createEmptyEntry(reportDate)])
-                  }
+                  onClick={() => updateData("entries", [...data.entries, createEmptyEntry()])}
                 >
                   <Plus /> เพิ่มรายการ
                 </Button>

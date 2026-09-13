@@ -5,6 +5,7 @@ import {
   MANPOWER_COMPANY_COMMANDER_SIGNATURE_PATH,
   MANPOWER_REPORTER_SIGNATURE_PATH,
   summarizeManpowerEntries,
+  getManpowerEntryPeriod,
   toThaiDigits,
   type ManpowerSheetData,
   type ManpowerSheetEntry,
@@ -310,7 +311,7 @@ function entryValues(entry: ManpowerSheetEntry, rowNumber: number): string[] {
     toThaiDigits(entry.squadNumber || "-"),
     MANPOWER_CATEGORY_LABELS[entry.category],
     toThaiDigits(entry.detail || "-"),
-    toThaiDigits(entry.period || "-"),
+    toThaiDigits(getManpowerEntryPeriod(entry) || "-"),
     toThaiDigits(entry.note || "-"),
   ];
 }

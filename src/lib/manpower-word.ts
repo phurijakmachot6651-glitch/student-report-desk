@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import {
   MANPOWER_CATEGORY_LABELS,
+  getManpowerEntryPeriod,
   summarizeManpowerEntries,
   toThaiDigits,
   type ManpowerSheetData,
@@ -377,7 +378,7 @@ export async function buildManpowerSheetDocx({
           toThaiDigits(entry.squadNumber || "-"),
           MANPOWER_CATEGORY_LABELS[entry.category],
           toThaiDigits(entry.detail || "-"),
-          toThaiDigits(entry.period || "-"),
+          toThaiDigits(getManpowerEntryPeriod(entry) || "-"),
           toThaiDigits(entry.note || "-"),
         ]
       : ["๑.", "", "", MANPOWER_CATEGORY_LABELS.sick, "", "", ""];
