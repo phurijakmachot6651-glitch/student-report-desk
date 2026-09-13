@@ -581,13 +581,26 @@ function ManpowerSheetPage() {
       const nextEntries = [...current.entries];
       const claimedIndexes = new Set<number>();
       entries.forEach((imported) => {
+        const sameImportedRecord = (entry: ManpowerSheetEntry) =>
+          Boolean(
+            imported.studentId &&
+            entry.studentId === imported.studentId &&
+            entry.category === imported.category &&
+            entry.detail.trim() === imported.detail.trim() &&
+            entry.period.trim() === imported.period.trim() &&
+            entry.note.trim() === imported.note.trim(),
+          );
+        const isNameOnlyDraft = (entry: ManpowerSheetEntry) =>
+          Boolean(
+            (imported.studentId && entry.studentId === imported.studentId) ||
+            (entry.name.trim() && entry.name.trim() === imported.name.trim()),
+          ) &&
+          !entry.detail.trim() &&
+          !entry.period.trim() &&
+          !entry.note.trim();
         const matchingIndex = nextEntries.findIndex(
           (entry, index) =>
-            !claimedIndexes.has(index) &&
-            Boolean(
-              (imported.studentId && entry.studentId === imported.studentId) ||
-              (entry.name.trim() && entry.name.trim() === imported.name.trim()),
-            ),
+            !claimedIndexes.has(index) && (sameImportedRecord(entry) || isNameOnlyDraft(entry)),
         );
         const emptyIndex = nextEntries.findIndex(
           (entry, index) => !claimedIndexes.has(index) && !isManpowerEntryFilled(entry),
